@@ -199,217 +199,206 @@ export default function DocRender({ documentBlocks, setDocumentBlocks, onSelecti
     // Export to PDF matching the preview
     const exportToPDF = async () => {
         const printWindow = window.open('', '', 'width=800,height=600');
+        if (printWindow) {
+            // Get the rendered HTML from the document
+            const documentContent = documentRef.current?.innerHTML || '';
 
-        if (!printWindow) return;
-
-        const documentContent = documentRef.current?.innerHTML || '';
-
-        printWindow.document.open();
-        printWindow.document.write(`
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Document</title>
-
-  <!-- Fonts -->
-  <link href="https://fonts.googleapis.com/css2?family=Gochi+Hand&display=swap" rel="stylesheet" />
-
-  <!-- KaTeX -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.0/dist/katex.min.css" />
-
-  <style>
-    /* ======================
-       PAGE & RESET
-    ====================== */
-
-    @page {
-      size: A4;
-      margin: 2cm;
-    }
-
-    * {
-      box-sizing: border-box;
-    }
-
-    html, body {
-      margin: 0;
-      padding: 0;
-    }
-
-    body {
-      font-family: 'Gochi Hand', cursive;
-      font-size: 12px;
-      line-height: 1.8;
-      background-color: #030712 !important;
-      color: #D8A1A1;
-      -webkit-print-color-adjust: exact !important;
-      print-color-adjust: exact !important;
-    }
-
-    .page {
-      width: 100%;
-    }
-
-    /* ======================
-       MARKDOWN STYLES
-    ====================== */
-
-    p {
-      margin-bottom: 1rem;
-      line-height: 1.75;
-    }
-
-    strong {
-      color: #F2B8A2 !important;
-      font-weight: 600;
-    }
-
-    em {
-      color: #C7C7C7 !important;
-      font-style: italic;
-    }
-
-    h1 {
-      color: #6EE7E7 !important;
-      font-size: 1.875rem;
-      font-weight: 700;
-      margin-bottom: 1rem;
-    }
-
-    h2 {
-      color: #A7F3D0 !important;
-      font-size: 1.5rem;
-      font-weight: 600;
-      margin-bottom: 0.75rem;
-    }
-
-    h3 {
-      color: #C4B5FD !important;
-      font-size: 1.25rem;
-      font-weight: 500;
-      margin-bottom: 0.5rem;
-    }
-
-    ul, ol {
-      margin-bottom: 1rem;
-      padding-left: 1.25rem;
-    }
-
-    li {
-      margin-bottom: 0.25rem;
-    }
-
-    blockquote {
-      border-left: 4px solid #5FB3A2;
-      padding-left: 1rem;
-      font-style: italic;
-      color: #9DB8A0;
-      margin-bottom: 1rem;
-    }
-
-    code {
-      background-color: #111827 !important;
-      color: #93C5FD !important;
-      padding: 0.125rem 0.375rem;
-      border-radius: 0.25rem;
-      font-size: 0.875rem;
-      font-family: monospace;
-    }
-
-    pre {
-      background-color: #0B1220 !important;
-      color: #BFC5CC !important;
-      padding: 1rem;
-      border-radius: 0.5rem;
-      overflow-x: auto;
-      margin-bottom: 1rem;
-    }
-
-    pre code {
-      background: none !important;
-      padding: 0;
-    }
-
-    a {
-      color: #6EE7E7 !important;
-      text-decoration: underline;
-      text-underline-offset: 4px;
-    }
-
-    hr {
-      border: none;
-      border-top: 1px solid #1F2937;
-      margin: 1.5rem 0;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 1rem;
-      border: 1px solid #374151;
-    }
-
-    thead {
-      background-color: #1F2937 !important;
-    }
-
-    th, td {
-      padding: 0.5rem 1rem;
-      border: 1px solid #374151;
-    }
-
-    th {
-      color: #A7F3D0;
-      font-weight: 600;
-    }
-
-    td {
-      color: #D8A1A1;
-    }
-
-    /* ======================
-       KaTeX
-    ====================== */
-
-    .katex {
-      font-size: 1.1em;
-    }
-
-    /* ======================
-       PRINT ENFORCEMENT
-    ====================== */
-
-    @media print {
-      body {
-        background-color: #030712 !important;
-      }
-
-      * {
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
-      }
-    }
-  </style>
-</head>
-
-<body>
-  <div class="page">
-    ${documentContent}
-  </div>
-</body>
-</html>
-  `);
-
-        await printWindow.document.fonts.ready;
-        printWindow.document.close();
-
-        setTimeout(() => {
-            printWindow.focus();
-            printWindow.print();
-        }, 500);
+            printWindow.document.write(`
+      <!DOCTYPE html>
+      <html lang="en">
+        <head>
+          <meta charset="UTF-8">
+          <link href="https://fonts.googleapis.com/css2?family=Pangolin&display=swap" rel="stylesheet">
+          <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.0/dist/katex.min.css">
+          <style>
+          
+            @page { 
+              size: A4; 
+              margin: 0;
+            }
+            * {
+              margin: 0;
+              padding: 0;
+            }
+            body {
+             
+               color-adjust: exact !important;
+              text-rendering: geometricPrecision;
+              font-family: 'Gochi Hand', cursive !important;
+              font-size: 12px;
+              line-height: 1.8;
+              background-color: #030712 !important;
+              color: #D8A1A1;
+              margin: 0 auto;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+            
+            /* Markdown element styling matching your preview */
+            p { 
+              color: #D8A1A1 !important;
+              margin-bottom: 1rem;
+              line-height: 1.75;
+            }
+            
+            strong {
+              color: #F2B8A2 !important;
+              font-weight: 600;
+            }
+            
+            em {
+              color: #C7C7C7 !important;
+              font-style: italic;
+            }
+            
+            h1 {
+              color: #6EE7E7 !important;
+              font-size: 1.875rem;
+              font-weight: 700;
+              margin-bottom: 1rem;
+            }
+            
+            h2 {
+              color: #A7F3D0 !important;
+              font-size: 1.5rem;
+              font-weight: 600;
+              margin-bottom: 0.75rem;
+            }
+            
+            h3 {
+              color: #C4B5FD !important;
+              font-size: 1.25rem;
+              font-weight: 500;
+              margin-bottom: 0.5rem;
+            }
+            
+            ul {
+              color: #D28ADB !important;
+              list-style-type: disc;
+              list-style-position: inside;
+              margin-bottom: 1rem;
+            }
+            
+            ol {
+              color: #D1696F !important;
+              list-style-type: decimal;
+              list-style-position: inside;
+              margin-bottom: 1rem;
+            }
+            
+            li {
+              margin-left: 0.5rem;
+              margin-bottom: 0.25rem;
+              color: inherit !important;
+            }
+            
+            blockquote {
+              border-left: 4px solid #5FB3A2 !important;
+              padding-left: 1rem;
+              font-style: italic;
+              color: #9DB8A0 !important;
+              margin-bottom: 1rem;
+            }
+            
+            code {
+              background-color: #111827 !important;
+              color: #93C5FD !important;
+              padding: 0.125rem 0.375rem;
+              border-radius: 0.25rem;
+              font-size: 0.875rem;
+              font-family: monospace;
+            }
+            
+            pre {
+              background-color: #0B1220 !important;
+              color: #BFC5CC !important;
+              padding: 1rem;
+              border-radius: 0.5rem;
+              overflow-x: auto;
+              margin-bottom: 1rem;
+            }
+            
+            pre code {
+              background-color: transparent !important;
+              padding: 0;
+            }
+            
+            a {
+              color: #6EE7E7 !important;
+              text-decoration: underline;
+              text-underline-offset: 4px;
+            }
+            
+            a:hover {
+              color: #93C5FD !important;
+            }
+            
+            hr {
+              border: none;
+              border-top: 1px solid #1F2937 !important;
+              margin: 1.5rem 0;
+            }
+            
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-bottom: 1rem;
+              border: 1px solid #374151 !important;
+            }
+            
+            thead {
+              background-color: #1F2937 !important;
+            }
+            
+            th {
+              padding: 0.5rem 1rem;
+              text-align: left;
+              color: #A7F3D0 !important;
+              font-weight: 600;
+              border: 1px solid #374151 !important;
+            }
+            
+            td {
+              padding: 0.5rem 1rem;
+              color: #D8A1A1 !important;
+              border: 1px solid #374151 !important;
+            }
+            
+            tr {
+              border-bottom: 1px solid #374151 !important;
+            }
+            
+            .mb-6 {
+              margin-bottom: 1.5rem;
+            }
+            
+            /* KaTeX styling */
+            .katex {
+              font-size: 1.1em;
+            }
+            
+            @media print {
+              * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                color-adjust: exact !important;
+              }
+              body {
+                background-color: #030712 !important;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          ${documentContent}
+        </body>
+      </html>
+    `);
+            await printWindow.document.fonts.ready;
+            printWindow.document.close();
+            setTimeout(() => printWindow.print(), 500);
+        }
     };
-
 
     return (
         <div className="flex-1 flex flex-col h-screen bg-neutral-900 text-neutral-100 overflow-y-auto scrollbar-hide rounded-2xl border-l-2">

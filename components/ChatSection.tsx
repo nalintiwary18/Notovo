@@ -359,8 +359,8 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
   // Show loading skeleton while chat is initializing
   if (isChatLoading) {
     return (
-      <div className="flex h-screen bg-background text-foreground rounded-2xl">
-        <div className="flex flex-1 flex-col rounded-2xl border border-border bg-white p-4 md:p-6 dark:bg-neutral-900">
+      <div className="flex h-screen bg-gray-950 text-foreground rounded-2xl">
+        <div className="flex flex-1 flex-col rounded-2xl border border-border bg-white p-4 md:p-6 dark:bg-neutral-950">
 
           {/* Header */}
           <div className="mb-4 flex items-center gap-3">
