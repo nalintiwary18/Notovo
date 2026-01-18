@@ -1,13 +1,14 @@
-// app/page.tsx
+// components/DocRender.tsx
 'use client';
 
-import React, { useRef, useState, useEffect } from 'react';
-import {AlertCircle, Download, Wand2, X} from 'lucide-react';
+import React, { useRef } from 'react';
+import { Download } from 'lucide-react';
 import ReactMarkdown from "react-markdown";
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import remarkGfm from 'remark-gfm';
+import { SelectionData } from '@/hooks/useUIState';
 
 
 interface Block {
@@ -17,199 +18,184 @@ interface Block {
     metadata?: Record<string, unknown>;
 }
 
-interface DocumentState {
-    blocks: Block[];
-}
-
-interface Selection {
-    startBlockId: string | null;
-    endBlockId: string | null;
-    startOffset: number;
-    endOffset: number;
-    selectedText: string;
-    hasSelection: boolean;
-}
 interface DocRenderProps {
     documentBlocks: Block[];
     setDocumentBlocks: React.Dispatch<React.SetStateAction<Block[]>>;
+    onSelectionChange?: (data: SelectionData | null) => void;
 }
 
-export default function DocRender({ documentBlocks, setDocumentBlocks }: DocRenderProps) {
-    const [documentState, setDocumentState] = useState<DocumentState>({
-        blocks: documentBlocks || [] // Add fallback to empty array
-    });
-
-// Sync with parent component
-    useEffect(() => {
-        setDocumentState({ blocks: documentBlocks || [] }); // Add fallback here too
-    }, [documentBlocks]);
-
-    const [selection, setSelection] = useState<Selection>({
-        startBlockId: null,
-        endBlockId: null,
-        startOffset: 0,
-        endOffset: 0,
-        selectedText: '',
-        hasSelection: false
-    });
-
-    const [aiCommand, setAiCommand] = useState('');
-    const [isProcessing, setIsProcessing] = useState(false);
-    const [showCommandBox, setShowCommandBox] = useState(false);
-    const [error, setError] = useState('');
-
+export default function DocRender({ documentBlocks, setDocumentBlocks, onSelectionChange }: DocRenderProps) {
     const documentRef = useRef<HTMLDivElement>(null);
 
-    // Handle text selection
+    // Handle text selection - only detect and emit, no UI
     const handleMouseUp = () => {
+        console.log('=== handleMouseUp called ===');
         const sel = window.getSelection();
-        if (!sel || sel.rangeCount === 0) return;
+        console.log('Selection:', sel);
 
-        const selectedText = sel.toString().trim();
+        if (!sel || sel.rangeCount === 0) {
+            console.log('No selection or no ranges');
+            onSelectionChange?.(null);
+            return;
+        }
+
+        // Normalize whitespace - replace multiple spaces/newlines with single space
+        const selectedText = sel.toString().trim().replace(/\s+/g, ' ');
+        console.log('Selected text:', selectedText);
+
         if (!selectedText) {
-            setShowCommandBox(false);
-            setSelection(prev => ({ ...prev, hasSelection: false }));
+            console.log('Empty selection');
+            onSelectionChange?.(null);
             return;
         }
 
         const range = sel.getRangeAt(0);
+        console.log('Range startContainer:', range.startContainer);
 
-        // Find which blocks are involved
-        let startBlock = range.startContainer as HTMLElement;
-        let endBlock = range.endContainer as HTMLElement;
-
-        // Traverse up to find the block element
-        while (startBlock && !(startBlock as HTMLElement).dataset?.blockId) {
-            startBlock = startBlock.parentElement as HTMLElement;
-        }
-        while (endBlock && !(endBlock as HTMLElement).dataset?.blockId) {
-            endBlock = endBlock.parentElement as HTMLElement;
+        // Get the starting element - handle text nodes
+        let startElement: HTMLElement | null = null;
+        if (range.startContainer.nodeType === Node.TEXT_NODE) {
+            startElement = range.startContainer.parentElement;
+        } else {
+            startElement = range.startContainer as HTMLElement;
         }
 
-        if (!(startBlock as HTMLElement)?.dataset?.blockId || !(endBlock as HTMLElement)?.dataset?.blockId) return;
+        console.log('Start element:', startElement);
 
-        // Calculate offsets within the block
-        const startBlockId = (startBlock as HTMLElement).dataset.blockId!;
-        const endBlockId = (endBlock as HTMLElement).dataset.blockId!;
+        if (!startElement) {
+            console.log('No start element found');
+            onSelectionChange?.(null);
+            return;
+        }
 
-        // For simplicity, we'll get the text content and find offsets
-        const startBlockContent = documentState.blocks.find(b => b.id === startBlockId)?.content || '';
-        const endBlockContent = documentState.blocks.find(b => b.id === endBlockId)?.content || '';
+        // Use closest() for more reliable traversal - find the element with data-block-id
+        const blockElement = startElement.closest('[data-block-id]') as HTMLElement;
+        console.log('Block element:', blockElement);
 
-        let startOffset = 0;
-        let endOffset = endBlockContent.length;
+        if (!blockElement) {
+            console.log('No block element with data-block-id found');
+            onSelectionChange?.(null);
+            return;
+        }
 
-        // Calculate precise offsets
-        if (startBlockId === endBlockId) {
-            startOffset = startBlockContent.indexOf(selectedText);
-            if (startOffset === -1) startOffset = 0;
+        const blockId = blockElement.dataset.blockId!;
+        console.log('Block ID:', blockId);
+
+        // Find the block content to calculate offsets
+        const block = documentBlocks.find(b => b.id === blockId);
+        if (!block) {
+            console.log('Block not found in documentBlocks');
+            onSelectionChange?.(null);
+            return;
+        }
+
+        // Helper to strip Markdown and create position map
+        const createPositionMap = (markdown: string): { stripped: string; map: number[] } => {
+            let stripped = '';
+            const map: number[] = []; // map[strippedIndex] = originalIndex
+
+            let i = 0;
+            while (i < markdown.length) {
+                // Skip ** (bold)
+                if (markdown.substring(i, i + 2) === '**') {
+                    i += 2;
+                    continue;
+                }
+                // Skip __ (bold alt)
+                if (markdown.substring(i, i + 2) === '__') {
+                    i += 2;
+                    continue;
+                }
+                // Skip single * or _ (italic) - but only if followed by non-space
+                if ((markdown[i] === '*' || markdown[i] === '_') &&
+                    i + 1 < markdown.length && markdown[i + 1] !== ' ') {
+                    // Check if this is formatting by looking for closing marker
+                    const marker = markdown[i];
+                    const closeIdx = markdown.indexOf(marker, i + 1);
+                    if (closeIdx !== -1 && closeIdx < markdown.indexOf(' ', i + 1)) {
+                        i++;
+                        continue;
+                    }
+                }
+                // Skip ` (inline code)
+                if (markdown[i] === '`') {
+                    i++;
+                    continue;
+                }
+
+                map.push(i);
+                stripped += markdown[i];
+                i++;
+            }
+
+            return { stripped, map };
+        };
+
+        const { stripped, map } = createPositionMap(block.content);
+        console.log('Stripped content:', stripped);
+        console.log('Selected text:', selectedText);
+
+        // Find in stripped content
+        let strippedStartOffset = stripped.indexOf(selectedText);
+
+        // Try normalized match if exact fails
+        if (strippedStartOffset === -1) {
+            const normalizedStripped = stripped.replace(/\s+/g, ' ');
+            const normalizedSelectedText = selectedText.replace(/\s+/g, ' ');
+            strippedStartOffset = normalizedStripped.indexOf(normalizedSelectedText);
+        }
+
+        console.log('strippedStartOffset:', strippedStartOffset);
+
+        let startOffset: number;
+        let endOffset: number;
+
+        if (strippedStartOffset !== -1 && map.length > 0) {
+            // Map back to original positions
+            startOffset = map[strippedStartOffset] ?? 0;
+            const strippedEndOffset = Math.min(strippedStartOffset + selectedText.length, map.length);
+            // For end offset, we need to go past the last character
+            if (strippedEndOffset < map.length) {
+                endOffset = map[strippedEndOffset];
+            } else {
+                // End is at the end of content
+                endOffset = block.content.length;
+            }
+        } else {
+            // Fallback: try direct indexOf
+            startOffset = block.content.indexOf(selectedText);
+            if (startOffset === -1) {
+                // Last resort: use first word
+                const firstWord = selectedText.split(' ')[0];
+                startOffset = block.content.indexOf(firstWord);
+                if (startOffset === -1) startOffset = 0;
+            }
             endOffset = startOffset + selectedText.length;
         }
 
-        setSelection({
-            startBlockId,
-            endBlockId,
+        console.log('Calculated offsets:', { startOffset, endOffset });
+
+        // Extract the original Markdown substring using the calculated offsets
+        const originalMarkdown = block.content.substring(startOffset, endOffset);
+        console.log('Original Markdown slice:', originalMarkdown);
+
+        // Emit selection data to parent with offsets and original markdown
+        console.log('Calling onSelectionChange with:', { blockId, selectedText, originalMarkdown, startOffset, endOffset });
+        onSelectionChange?.({
+            blockId,
+            selectedText,
+            originalMarkdown,
             startOffset,
             endOffset,
-            selectedText,
-            hasSelection: true
         });
-
-        setShowCommandBox(true);
     };
 
-    // Apply AI edit to document
-    const applyEdit = (newText: string) => {
-        const { startBlockId, endBlockId, startOffset, endOffset } = selection;
-
-        setDocumentState(prev => {
-            const newBlocks = [...prev.blocks];
-
-            // Single block edit (most common case)
-            if (startBlockId === endBlockId) {
-                const blockIndex = newBlocks.findIndex(b => b.id === startBlockId);
-                if (blockIndex === -1) return prev;
-
-                const block = newBlocks[blockIndex];
-                const before = block.content.substring(0, startOffset);
-                const after = block.content.substring(endOffset);
-
-                newBlocks[blockIndex] = {
-                    ...block,
-                    content: before + newText + after
-                };
-            } else {
-                // Multi-block edit - merge into single block for simplicity
-                const startBlockIndex = newBlocks.findIndex(b => b.id === startBlockId);
-                const endBlockIndex = newBlocks.findIndex(b => b.id === endBlockId);
-
-                if (startBlockIndex === -1 || endBlockIndex === -1) return prev;
-
-                const startBlock = newBlocks[startBlockIndex];
-                const endBlock = newBlocks[endBlockIndex];
-
-                const before = startBlock.content.substring(0, startOffset);
-                const after = endBlock.content.substring(endOffset);
-
-                newBlocks[startBlockIndex] = {
-                    ...startBlock,
-                    content: before + newText + after
-                };
-
-                // Remove blocks in between
-                newBlocks.splice(startBlockIndex + 1, endBlockIndex - startBlockIndex);
-            }
-
-            setDocumentBlocks(newBlocks); // Sync with parent
-            return { blocks: newBlocks };
-        });
-
-        // Clear selection and command
-        setShowCommandBox(false);
-        setAiCommand('');
-        window.getSelection()?.removeAllRanges();
-    };
-
-    // Handle AI command using the API route
-    const handleAIEdit = async () => {
-        if (!aiCommand.trim() || !selection.selectedText) return;
-
-        setIsProcessing(true);
-        setError('');
-
-        try {
-            const response = await fetch('/api/docrender', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    selectedText: selection.selectedText,
-                    command: aiCommand
-                })
-            });
-
-            if (!response.ok) {
-                throw new Error('API request failed');
-            }
-
-            const data = await response.json();
-
-            if (data.error) {
-                throw new Error(data.error);
-            }
-
-            applyEdit(data.editedText);
-        } catch (err) {
-            setError('Failed to process AI command. Please try again.');
-            console.error('AI Edit Error:', err);
-        } finally {
-            setIsProcessing(false);
-        }
+    // Clear selection when clicking outside
+    const handleMouseDown = () => {
+        // Selection will be handled on mouseUp
     };
 
 
-    // Export to PDF matching the preview
     // Export to PDF matching the preview
     const exportToPDF = async () => {
         const printWindow = window.open('', '', 'width=800,height=600');
@@ -223,7 +209,7 @@ export default function DocRender({ documentBlocks, setDocumentBlocks }: DocRend
         <head>
           <title>Document</title>
           <meta charset="UTF-8">
-          <link href="https://fonts.googleapis.com/css2?family=Gochi+Hand&display=swap" rel="stylesheet">
+          <link href="https://fonts.googleapis.com/css2?family=Pangolin&display=swap" rel="stylesheet">
           <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.0/dist/katex.min.css">
           <style>
           
@@ -236,8 +222,8 @@ export default function DocRender({ documentBlocks, setDocumentBlocks }: DocRend
               padding: 0;
             }
             body {
-             -webkit-font-smoothing: antialiased;
-             -moz-osx-font-smoothing: grayscale;
+             
+               color-adjust: exact !important;
               text-rendering: geometricPrecision;
               font-family: 'Gochi Hand', cursive !important;
               font-size: 12px;
@@ -247,8 +233,8 @@ export default function DocRender({ documentBlocks, setDocumentBlocks }: DocRend
               max-width: 21cm;
               margin: 0 auto;
               padding: 2cm;
-              -webkit-print-color-adjust: exact;
-              print-color-adjust: exact;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
             }
             
             /* Markdown element styling matching your preview */
@@ -331,7 +317,7 @@ export default function DocRender({ documentBlocks, setDocumentBlocks }: DocRend
               color: #BFC5CC !important;
               padding: 1rem;
               border-radius: 0.5rem;
-              overflow-x-auto;
+              overflow-x: auto;
               margin-bottom: 1rem;
             }
             
@@ -421,66 +407,12 @@ export default function DocRender({ documentBlocks, setDocumentBlocks }: DocRend
         <div className="flex-1 flex flex-col h-screen bg-neutral-900 text-neutral-100 overflow-y-auto scrollbar-hide rounded-2xl border-l-2">
             <div className="max-w-4xl mx-auto">
 
-                        <button
-                            onClick={exportToPDF}
-                            className="flex items-center gap-2 bg-blue-400 text-white px-4 py-2 h-12 w-12 hover:bg-gray-700 transition rounded-full top-12 absolute opacity-70 right-30"
-                        >
-                            <Download size={20} />
-                        </button>
-
-                {/* Command Box */}
-                {showCommandBox && (
-                    <div className=" rounded-lg shadow-xl p-4 mb-4 border-2 border-blue-500">
-                        <div className="flex items-start justify-between mb-3">
-                            <div className="flex items-center gap-2 text-blue-600">
-                                <Wand2 size={20} />
-                                <span className="font-semibold">AI Command</span>
-                            </div>
-                            <button
-                                onClick={() => {
-                                    setShowCommandBox(false);
-                                    setAiCommand('');
-                                    setError('');
-                                }}
-                                className="text-gray-400 hover:text-gray-600"
-                            >
-                                <X size={20} />
-                            </button>
-                        </div>
-
-                        <div className="mb-2">
-                            <div className="text-sm text-gray-600 mb-2">
-                                Selected: &quot;{selection.selectedText.substring(0, 50)}
-                                {selection.selectedText.length > 50 ? '...' : ''}&quot;
-                            </div>
-                        </div>
-
-                        <input
-                            type="text"
-                            value={aiCommand}
-                            onChange={(e) => setAiCommand(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && handleAIEdit()}
-                            placeholder="e.g., make it more formal, add emojis, translate to Spanish..."
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            disabled={isProcessing}
-                        />
-
-                        {error && (
-                            <div className="flex items-center gap-2 text-red-600 text-sm mb-3">
-                                <AlertCircle size={16} />
-                                {error}
-                            </div>
-                        )}
-
-                        <button
-                            onClick={handleAIEdit}
-                            disabled={isProcessing || !aiCommand.trim()}
-                            className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
-                        >
-                            {isProcessing ? 'Processing...' : 'Apply AI Edit'}
-                        </button>
-                    </div>
-                )}
+                <button
+                    onClick={exportToPDF}
+                    className="flex items-center gap-2 bg-blue-400 text-white px-4 py-2 h-12 w-12 hover:bg-gray-700 transition rounded-full top-12 absolute opacity-70 right-30"
+                >
+                    <Download size={20} />
+                </button>
 
                 {/* Document Preview */}
                 <div className="flex-1 p-8 overflow-auto">
@@ -497,15 +429,16 @@ export default function DocRender({ documentBlocks, setDocumentBlocks }: DocRend
                         <div
                             ref={documentRef}
                             onMouseUp={handleMouseUp}
+                            onMouseDown={handleMouseDown}
                             className="prose max-w-none "
                             style={{ fontSize: '12px', lineHeight: '1.8' }}
                         >
-                            {documentState.blocks.length === 0 ? (
+                            {documentBlocks.length === 0 ? (
                                 <div className="text-gray-400 text-center mt-20">
                                     Chat with AI to generate document content
                                 </div>
                             ) : (
-                                documentState.blocks.map((block) => {
+                                documentBlocks.map((block) => {
                                     const processedContent = block.content
                                         .replace(/\\\[/g, '$$')  // Converts \[ to $$
                                         .replace(/\\]/g, '$$')  // Converts \] to $$
@@ -613,13 +546,13 @@ export default function DocRender({ documentBlocks, setDocumentBlocks }: DocRend
 
                                                     thead: ({ children }) => (
                                                         <thead className="bg-[#1F2937]">
-                                                        {children}
+                                                            {children}
                                                         </thead>
                                                     ),
 
                                                     tbody: ({ children }) => (
                                                         <tbody>
-                                                        {children}
+                                                            {children}
                                                         </tbody>
                                                     ),
 
@@ -650,7 +583,7 @@ export default function DocRender({ documentBlocks, setDocumentBlocks }: DocRend
                                     )
                                 }
 
-                                    )
+                                )
                             )}
                         </div>
                     </div>

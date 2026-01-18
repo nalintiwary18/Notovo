@@ -1,13 +1,16 @@
-// app/api/docrender/route.ts
+
 import { ChatGroq } from "@langchain/groq";
 import { NextResponse } from "next/server";
-import { BaseMessage } from "@langchain/core/messages";
+
+
 
 const llm = new ChatGroq({
     apiKey: process.env.GROQ_API_KEY,
-    model: "openai/gpt-oss-20b",
+    model: "openai/gpt-oss-120b",
     temperature: 0.7,
 });
+
+
 
 export async function POST(request: Request) {
     try {
@@ -21,11 +24,16 @@ export async function POST(request: Request) {
         }
 
         // Create the prompt for AI editing
-        const prompt = `Selected text: "${selectedText}"
+        const prompt = `You are editing a piece of text. The text may contain Markdown formatting (like **bold**, *italic*, etc.).
+
+Selected text: "${selectedText}"
 
 User instruction: ${command}
 
-Return ONLY the edited text with no explanation, quotes, or markdown. Just the raw edited text that will replace the selection.`;
+IMPORTANT: 
+- Return ONLY the edited text, no explanation or quotes around it.
+- If the original text had Markdown formatting, preserve or adapt it appropriately in your response.
+- Match the style and formatting of the original.`;
 
         // Invoke the LLM
         const response = await llm.invoke(prompt);

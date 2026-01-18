@@ -3,18 +3,18 @@ import { ChatGroq } from "@langchain/groq";
 import { NextResponse } from "next/server";
 import mammoth from "mammoth";
 import { BaseMessage } from "@langchain/core/messages";
-import { GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf.mjs";
-
+// Using pdf-parse-fork for simpler PDF parsing (legacy API)
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const pdfParse = require('pdf-parse-fork');
 
 const llm = new ChatGroq({
   apiKey: process.env.GROQ_API_KEY,
-  model: "openai/gpt-oss-20b",
+  model: "openai/gpt-oss-120b",
   temperature: 0.7,
 });
-export const runtime = "nodejs";
-GlobalWorkerOptions.workerSrc = "";
 
-import { PDFParse } from 'pdf-parse';
+
+export const runtime = "nodejs";
 
 type ChatMessage = { role: string; content: string };
 
@@ -26,26 +26,40 @@ interface ContentBlock {
   text?: string;
 }
 
-async function extractText(file: File, buffer: Buffer) {
-  if (file.name.endsWith(".pdf")) {
-    try {
+// PDF parsing with retry for first-time initialization
+async function parsePdfWithRetry(buffer: Buffer, maxRetries = 2): Promise<string> {
+  let lastError: Error | null = null;
 
-      const parser = new PDFParse({
-        data: buffer,
-      });
-      const data = await parser.getText()
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const data = await pdfParse(buffer);
 
       if (!data.text) {
         throw new Error("PDF contains no extractable text.");
       }
       return data.text;
     } catch (error) {
-      console.error("PDF Parsing Error:", error);
-      throw new Error("Failed to parse PDF file.");
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.error(`PDF Parsing attempt ${attempt}/${maxRetries} failed:`, error);
+
+      // Small delay before retry to allow initialization to complete
+      if (attempt < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
     }
   }
 
-  if (file.name.endsWith(".docx")) {
+  throw new Error(`Failed to parse PDF file after ${maxRetries} attempts: ${lastError?.message}`);
+}
+
+async function extractText(file: File, buffer: Buffer) {
+  const fileName = file.name.toLowerCase();
+
+  if (fileName.endsWith(".pdf")) {
+    return await parsePdfWithRetry(buffer);
+  }
+
+  if (fileName.endsWith(".docx")) {
     const result = await mammoth.extractRawText({ buffer });
     return result.value;
   }
@@ -97,20 +111,20 @@ export async function POST(req: Request) {
       }
 
       messages = parsed
-          .map((m: unknown) => {
-            if (
-                typeof m === "object" &&
-                m !== null &&
-                "role" in m &&
-                "content" in m &&
-                typeof (m as { role: unknown }).role === "string" &&
-                typeof (m as { content: unknown }).content === "string"
-            ) {
-              return m as ChatMessage;
-            }
-            return null;
-          })
-          .filter((m: ChatMessage | null): m is ChatMessage => m !== null);
+        .map((m: unknown) => {
+          if (
+            typeof m === "object" &&
+            m !== null &&
+            "role" in m &&
+            "content" in m &&
+            typeof (m as { role: unknown }).role === "string" &&
+            typeof (m as { content: unknown }).content === "string"
+          ) {
+            return m as ChatMessage;
+          }
+          return null;
+        })
+        .filter((m: ChatMessage | null): m is ChatMessage => m !== null);
 
       console.log("Filtered messages:", messages);
 
@@ -156,13 +170,15 @@ export async function POST(req: Request) {
   console.log("Final messages count:", messages.length);
 
   const messagesWithContext: ChatMessage[] = extractedText
-      ? [
-        { role: "system", content: `You are given the following document content. Use it to answer questions.
-        Format the information without using markdown table separators.\n\n${extractedText.slice(0, 15000)}` },
+    ? [
+      {
+        role: "system", content: `You are given the following document content. Use it to answer questions.
+        Format the information without using markdown table separators.\n\n${extractedText.slice(0, 15000)}`
+      },
 
-        ...messages,
-      ]
-      : messages;
+      ...messages,
+    ]
+    : messages;
 
   try {
     const encoder = new TextEncoder();
@@ -173,14 +189,14 @@ export async function POST(req: Request) {
           for await (const chunk of await llm.stream(messagesWithContext as unknown as BaseMessage[])) {
             const streamChunk = chunk as StreamChunk;
             const content =
-                typeof streamChunk.content === "string"
-                    ? streamChunk.content
-                    : streamChunk.content
-                        .map((block: ContentBlock) => {
-                          if (typeof block === "string") return block;
-                          return block.text || "";
-                        })
-                        .join("");
+              typeof streamChunk.content === "string"
+                ? streamChunk.content
+                : streamChunk.content
+                  .map((block: ContentBlock) => {
+                    if (typeof block === "string") return block;
+                    return block.text || "";
+                  })
+                  .join("");
 
             if (content) {
               controller.enqueue(encoder.encode(content));

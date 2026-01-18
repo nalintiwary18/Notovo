@@ -2,47 +2,32 @@
 import React, { useState } from "react";
 import { Sidebar, SidebarBody, SidebarLink } from "@/components/ui/sidebar";
 import {
-    IconArrowLeft,
-    IconBrandTabler,
-    IconSettings,
-    IconUserBolt,
+    IconMessageCirclePlus,
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
-import {TextAlignJustify} from "lucide-react"
 import Image from "next/image";
-import SplitScreen from "@/components/SplitScreen";
+import MainContent from "@/components/MainContent";
+import { UIStateProvider } from "@/hooks/useUIState";
+import { clearSession } from "@/lib/storage";
 
 
 export function SidebarDemo() {
+    const handleNewChat = () => {
+        // Clear the current session
+        clearSession();
+        // Reload the page to start fresh
+        window.location.reload();
+    };
+
     const links = [
         {
-            label: "Dashboard",
+            label: "New Chat",
             href: "#",
             icon: (
-                <IconBrandTabler className="h-5 w-5 shrink-0 text-neutral-700 dark:text-neutral-200" />
+                <IconMessageCirclePlus className="h-5 w-5 shrink-0 text-neutral-700 dark:text-neutral-200" />
             ),
-        },
-        {
-            label: "Profile",
-            href: "#",
-            icon: (
-                <IconUserBolt className="h-5 w-5 shrink-0 text-neutral-700 dark:text-neutral-200" />
-            ),
-        },
-        {
-            label: "Settings",
-            href: "#",
-            icon: (
-                <IconSettings className="h-5 w-5 shrink-0 text-neutral-700 dark:text-neutral-200" />
-            ),
-        },
-        {
-            label: "Logout",
-            href: "#",
-            icon: (
-                <IconArrowLeft className="h-5 w-5 shrink-0 text-neutral-700 dark:text-neutral-200" />
-            ),
-        },
+            onClick: handleNewChat,
+        }
     ];
     const [open, setOpen] = useState(false);
     return (
@@ -55,7 +40,13 @@ export function SidebarDemo() {
             <Sidebar open={open} setOpenAction={setOpen}>
                 <SidebarBody className="justify-between gap-10">
                     <div className="flex flex-1 flex-col overflow-x-hidden overflow-y-auto">
-                        {open ? <TextAlignJustify color={"white"}/> :<TextAlignJustify color={"white"}/> }
+                        <Image
+                            src="/logo.svg"
+                            width={50}
+                            height={50}
+                            alt="Logo"
+                            onClick={() => setOpen(!open)}
+                        />
                         <div className="mt-8 flex flex-col gap-2">
                             {links.map((link, idx) => (
                                 <SidebarLink key={idx} link={link} />
@@ -81,7 +72,9 @@ export function SidebarDemo() {
                     </div>
                 </SidebarBody>
             </Sidebar>
-            <SplitScreen/>
+            <UIStateProvider>
+                <MainContent />
+            </UIStateProvider>
         </div>
     );
 }
