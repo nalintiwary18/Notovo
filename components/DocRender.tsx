@@ -229,7 +229,7 @@ export default function DocRender({ documentBlocks, setDocumentBlocks, onSelecti
               line-height: 1.8;
               background-color: #030712 !important;
               color: #D8A1A1;
-              margin: 0 auto;
+              margin: 2cm;
               -webkit-print-color-adjust: exact !important;
               print-color-adjust: exact !important;
             }
