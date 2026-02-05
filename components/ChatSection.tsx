@@ -191,8 +191,6 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
         "- Use emphasis sparingly for tone or nuance.\n" +
         "- Use unordered or ordered lists for grouped or sequential information.\n" +
         "- Use blockquotes only for callouts, notes, or important observations.\n" +
-        "- Use inline code for short technical references, variables, or commands.\n" +
-        "- Use code blocks only for executable or structured code.\n" +
         "\n" +
         "Constraints:\n" +
         "- Do not invent new formatting types.\n" +

@@ -1,7 +1,7 @@
 // components/DocRender.tsx
 'use client';
 
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useMemo } from 'react';
 import { Download } from 'lucide-react';
 import ReactMarkdown from "react-markdown";
 import remarkMath from 'remark-math';
@@ -30,6 +30,39 @@ export default function DocRender({ documentBlocks, setDocumentBlocks, onSelecti
     const documentRef = useRef<HTMLDivElement>(null);
     const [showLoginPrompt, setShowLoginPrompt] = useState(false);
     const { isAuthenticated } = useAuth();
+
+    // Group adjacent blocks so that fenced code blocks spanning multiple blocks render correctly
+    const renderGroups = useMemo(() => {
+        const groups: { id: string; originalIds: string[]; content: string }[] = [];
+        let current: Block[] = [];
+        let fenceOpen = false;
+
+        const pushCurrent = () => {
+            if (current.length === 0) return;
+            groups.push({
+                id: current[0].id,
+                originalIds: current.map(b => b.id),
+                content: current.map(b => b.content).join('\n\n'),
+            });
+            current = [];
+        };
+
+        for (const block of documentBlocks) {
+            current.push(block);
+            const content = block.content || '';
+            const tickCount = (content.match(/```/g) || []).length;
+            if (tickCount % 2 === 1) {
+                fenceOpen = !fenceOpen;
+            }
+            if (!fenceOpen) {
+                pushCurrent();
+            }
+        }
+        // If the last group is still open (unbalanced fences), still push it
+        pushCurrent();
+
+        return groups;
+    }, [documentBlocks]);
 
     // Handle text selection - only detect and emit, no UI
     const handleMouseUp = () => {
@@ -445,16 +478,19 @@ export default function DocRender({ documentBlocks, setDocumentBlocks, onSelecti
                                     Chat with AI to generate document content
                                 </div>
                             ) : (
-                                documentBlocks.map((block) => {
-                                    const processedContent = block.content
+                                renderGroups.map((group) => {
+
+                                    const processedContent = group.content
                                         .replace(/\\\[/g, '$$')  // Converts \[ to $$
                                         .replace(/\\]/g, '$$')  // Converts \] to $$
                                         .replace(/\\\(/g, '$')   // Converts \( to $
                                         .replace(/\\\)/g, '$');
+
+
                                     return (
                                         <div
-                                            key={block.id}
-                                            data-block-id={block.id}
+                                            key={group.id}
+                                            data-block-id={group.id}
                                             className="mb-6 select-text cursor-text"
                                         >
                                             <ReactMarkdown
@@ -520,7 +556,7 @@ export default function DocRender({ documentBlocks, setDocumentBlocks, onSelecti
                                                     ),
 
                                                     code: ({ children }) => (
-                                                        <code className="bg-[#111827] text-[#93C5FD] px-1.5 py-0.5 rounded text-sm">
+                                                        <code className="bg-[#0B1220] text-[#93C5FD] px-1.5 py-0.5 rounded text-sm">
                                                             {children}
                                                         </code>
                                                     ),

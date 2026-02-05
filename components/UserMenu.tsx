@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { LogOut, Settings, User, ChevronRight } from 'lucide-react'
 import { useAuth } from '@/hooks/AuthContext'
 import { useRouter } from 'next/navigation'
+import {getAvatarGradient} from "@/components/ui/avatar";
 import Image from 'next/image'
 
 interface UserMenuProps {
@@ -44,6 +45,9 @@ export default function UserMenu({ collapsed = false }: UserMenuProps) {
     const displayEmail = user?.email || ''
     const avatarUrl = user?.user_metadata?.avatar_url || null
     const initials = displayName.charAt(0).toUpperCase()
+    const avatarSeed = user?.id || user?.email || displayName
+    const gradient = getAvatarGradient(avatarSeed)
+
 
     if (loading) {
         return (
@@ -73,8 +77,9 @@ export default function UserMenu({ collapsed = false }: UserMenuProps) {
                 onClick={() => setIsOpen(!isOpen)}
                 className="flex items-center gap-2 py-2 hover:bg-neutral-700/50 rounded-lg transition-colors w-full"
             >
-                <div className="p-4 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white text-sm font-medium">
-                </div>
+                <div
+                    className={`p-4 rounded-full bg-gradient-to-br ${gradient}flex items-center justify-center text-white text-sm font-semibold`}
+                />
                 {!collapsed && (
                     <motion.span
                         initial={{ opacity: 0 }}

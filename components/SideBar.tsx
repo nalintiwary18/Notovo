@@ -116,7 +116,7 @@ export function SidebarDemo() {
         >
             <Sidebar open={open} setOpenAction={setOpen}>
                 <SidebarBody className="justify-between gap-4">
-                    <div className="flex flex-1 flex-col overflow-x-hidden overflow-y-auto">
+                    <div className="flex flex-1 flex-col overflow-x-hidden overflow-y-clip">
                         {/* Logo */}
                         <div className=" h-24">
                             <Image
@@ -147,9 +147,9 @@ export function SidebarDemo() {
                                     className="mt-6"
                                 >
                                     {open && (
-                                        <div>
+                                        <div className="overflow-y-auto scrollbar-hide">
                                             <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-2 px-2">
-                                                Recent Chats
+                                                Chats
                                             </p>
                                             <div className="flex flex-col gap-1">
                                                 {chatSessions.map((session) => (
