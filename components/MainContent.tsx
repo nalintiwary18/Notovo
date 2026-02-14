@@ -247,17 +247,8 @@ export default function MainContent() {
         setSelection(data);
     };
 
-    // Show loading state while documents are being loaded
-    if (isDocumentLoading) {
-        return (
-            <div className="h-screen w-full flex items-center justify-center bg-gray-950 rounded-2xl">
-                <div className="flex flex-col items-center gap-4">
-                    <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                    <span className="text-muted-foreground">Loading session...</span>
-                </div>
-            </div>
-        );
-    }
+
+
 
     return (
         <div className="h-screen w-full overflow-hidden">

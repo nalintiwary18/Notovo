@@ -269,7 +269,7 @@ export default function DocRender({ documentBlocks, setDocumentBlocks, onSelecti
              
                color-adjust: exact !important;
               text-rendering: geometricPrecision;
-              font-family: 'Gochi Hand', cursive !important;
+              font-family: 'Pangolin', cursive !important;
               font-size: 12px;
               line-height: 1.8;
               background-color: #030712 !important;
@@ -469,7 +469,7 @@ export default function DocRender({ documentBlocks, setDocumentBlocks, onSelecti
                                 width: '100%',
                                 minHeight: isMobile ? 'auto' : '29.7cm',
                                 padding: isMobile ? '1rem' : '2cm',
-                                fontFamily: 'Gochi Hand, cursive'
+                                fontFamily: "'Pangolin', cursive"
                             }}
                         >
                             <div

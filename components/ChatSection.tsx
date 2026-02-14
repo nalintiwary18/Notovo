@@ -42,6 +42,7 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
   const scrollContainerRef = useRef<HTMLDivElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
+
   // Auth state
   const { isAuthenticated, user } = useAuth()
 
@@ -547,50 +548,11 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
     if (text.length <= maxLength) return text
     return text.substring(0, maxLength) + "..."
   }
+  const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User'
 
-  // Show loading skeleton while chat is initializing
-  if (isChatLoading) {
-    return (
-      <div className="flex h-screen bg-gray-950 text-foreground rounded-2xl">
-        <div className="flex flex-1 flex-col rounded-2xl border border-border bg-white p-4 md:p-6 dark:bg-neutral-950">
 
-          {/* Header */}
-          <div className="mb-4 flex items-center gap-3">
-            <div className="h-10 w-10 animate-pulse rounded-full bg-gray-100 dark:bg-neutral-800" />
-            <div className="flex flex-col gap-2">
-              <div className="h-3 w-32 animate-pulse rounded bg-gray-100 dark:bg-neutral-800" />
-              <div className="h-3 w-20 animate-pulse rounded bg-gray-100 dark:bg-neutral-800" />
-            </div>
-          </div>
 
-          {/* Messages */}
-          <div className="flex flex-1 flex-col gap-4 overflow-hidden">
-            {[...new Array(6)].map((_, idx) => (
-              <div
-                key={"chat-message-skeleton-" + idx}
-                className={`flex ${idx % 2 === 0 ? "justify-start" : "justify-end"
-                  }`}
-              >
-                <div className="max-w-xs w-full space-y-2 animate-pulse">
-                  <div className="h-4 w-full rounded-lg bg-gray-100 dark:bg-neutral-800" />
-                  <div className="h-4 w-3/4 rounded-lg bg-gray-100 dark:bg-neutral-800" />
-                </div>
-              </div>
-            ))}
-          </div>
 
-          {/* Input */}
-          <div className="mt-4 border-t border-border pt-4">
-            <div className="flex items-center gap-2">
-              <div className="h-12 flex-1 animate-pulse rounded-lg bg-gray-100 dark:bg-neutral-800" />
-              <div className="h-12 w-12 animate-pulse rounded-lg bg-gray-100 dark:bg-neutral-800" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-    )
-  }
 
   return (
     <div
@@ -627,17 +589,9 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
               transition={{ duration: 0.5 }}
               className="flex-1 flex flex-col justify-center px-4 py-8"
             >
-              <h1 className="text-5xl md:text-6xl font-semibold tracking-tight text-foreground mb-3">Hi User</h1>
-              <p className="text-lg md:text-xl text-muted-foreground">Where should we start?</p>
-              <div className="mt-8 space-y-3">
-                <p className="text-sm text-muted-foreground">Try Uploading:</p>
-                <ul className="space-y-2 text-sm text-muted-foreground">
-                  <li className="flex items-start gap-3">
-                    <span className="text-primary mt-0.5">→</span>
-                    <span>Upload a document to create notes</span>
-                  </li>
-                </ul>
-              </div>
+              <h1 className="text-5xl md:text-2xl font-semibold tracking-tight text-foreground mb-3">Hi {displayName}</h1>
+              <p className="text-lg md:text-6xl text-muted-foreground">Where should we start?</p>
+
             </motion.div>
           ) : (
             <div className="py-8 space-y-6 px-4">
@@ -863,6 +817,9 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
             </button>
           </div>
         </div>
+        <p className="text-[10px] text-neutral-600 text-center py-1 select-none">
+          Notovo can make mistakes. Verify important information.
+        </p>
       </div>
 
       {/* Login Prompt Modal */}

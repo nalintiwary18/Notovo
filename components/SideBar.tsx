@@ -22,7 +22,9 @@ const LAST_ACTIVITY_KEY = 'notovo_last_activity';
 export function SidebarDemo() {
     const [open, setOpen] = useState(false);
     const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
-    const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+
+    // Load current session ID
+    const [currentSessionId] = useState(() => getOrCreateSessionId());
     const { user, isAuthenticated } = useAuth();
 
     // Track activity for anonymous session timeout
@@ -56,11 +58,7 @@ export function SidebarDemo() {
         };
     }, [isAuthenticated]);
 
-    // Load current session ID
-    useEffect(() => {
-        const sid = getOrCreateSessionId();
-        setCurrentSessionId(sid);
-    }, []);
+
 
     // Load user's chat sessions when authenticated
     useEffect(() => {
@@ -148,40 +146,40 @@ export function SidebarDemo() {
                                 >
                                     {open && (
                                         <div>
-                                        <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-2 px-2">
-                                            Chats
-                                        </p>
-                                        <div
-                                            className="overflow-y-auto overflow-x-hidden max-h-[60vh]"
-                                            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-                                        >
+                                            <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-2 px-2">
+                                                Chats
+                                            </p>
+                                            <div
+                                                className="overflow-y-auto overflow-x-hidden max-h-[60vh]"
+                                                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                                            >
 
-                                            <div className="flex flex-col gap-1">
-                                                {chatSessions.map((session) => (
-                                                    <button
-                                                        key={session.id}
-                                                        onClick={() => handleSelectSession(session.id)}
-                                                        className={cn(
-                                                            "flex items-center gap-2 py-2 px-2 rounded-lg transition-colors text-left w-full",
-                                                            session.id === currentSessionId
-                                                                ? "bg-purple-500/20 text-purple-300"
-                                                                : "text-neutral-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700"
-                                                        )}
-                                                    >
-                                                        <IconMessage className="h-4 w-4 shrink-0" />
-                                                        {open && (
-                                                            <motion.span
-                                                                initial={{ opacity: 0 }}
-                                                                animate={{ opacity: 1 }}
-                                                                className="text-sm truncate"
-                                                            >
-                                                                {session.title || 'Untitled Chat'}
-                                                            </motion.span>
-                                                        )}
-                                                    </button>
-                                                ))}
+                                                <div className="flex flex-col gap-1">
+                                                    {chatSessions.map((session) => (
+                                                        <button
+                                                            key={session.id}
+                                                            onClick={() => handleSelectSession(session.id)}
+                                                            className={cn(
+                                                                "flex items-center gap-2 py-2 px-2 rounded-lg transition-colors text-left w-full",
+                                                                session.id === currentSessionId
+                                                                    ? "bg-purple-500/20 text-purple-300"
+                                                                    : "text-neutral-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700"
+                                                            )}
+                                                        >
+                                                            <IconMessage className="h-4 w-4 shrink-0" />
+                                                            {open && (
+                                                                <motion.span
+                                                                    initial={{ opacity: 0 }}
+                                                                    animate={{ opacity: 1 }}
+                                                                    className="text-sm truncate"
+                                                                >
+                                                                    {session.title || 'Untitled Chat'}
+                                                                </motion.span>
+                                                            )}
+                                                        </button>
+                                                    ))}
+                                                </div>
                                             </div>
-                                        </div>
                                         </div>
 
 
@@ -196,6 +194,9 @@ export function SidebarDemo() {
                     {/* User Menu at bottom */}
                     <div className="pt-4 border-t border-neutral-700/50">
                         <UserMenu collapsed={!open} />
+                        <p className="text-[10px] text-neutral-600 text-center mt-2 select-none">
+                            {open ? 'v0.5.1 beta' : 'β'}
+                        </p>
                     </div>
                 </SidebarBody>
             </Sidebar>

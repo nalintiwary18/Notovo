@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { LogOut, Settings, User, ChevronRight } from 'lucide-react'
 import { useAuth } from '@/hooks/AuthContext'
 import { useRouter } from 'next/navigation'
-import {getAvatarGradient} from "@/components/ui/avatar";
+import { getAvatarGradient } from "@/components/ui/avatar";
 import Image from 'next/image'
 
 interface UserMenuProps {
@@ -127,32 +127,6 @@ export default function UserMenu({ collapsed = false }: UserMenuProps) {
 
                         {/* Menu Items */}
                         <div className="p-2">
-                            <button
-                                onClick={() => {
-                                    setIsOpen(false)
-                                    // Profile placeholder - no action yet
-                                }}
-                                className="w-full flex items-center gap-3 px-3 py-2.5 text-gray-300 hover:text-white hover:bg-neutral-700/50 rounded-lg transition-colors group"
-                            >
-                                <User className="h-4 w-4 text-gray-400 group-hover:text-purple-400" />
-                                <span className="flex-1 text-left text-sm">Profile</span>
-                                <ChevronRight className="h-4 w-4 text-gray-500" />
-                            </button>
-
-                            <button
-                                onClick={() => {
-                                    setIsOpen(false)
-                                    // Settings placeholder - no action yet
-                                }}
-                                className="w-full flex items-center gap-3 px-3 py-2.5 text-gray-300 hover:text-white hover:bg-neutral-700/50 rounded-lg transition-colors group"
-                            >
-                                <Settings className="h-4 w-4 text-gray-400 group-hover:text-purple-400" />
-                                <span className="flex-1 text-left text-sm">Settings</span>
-                                <ChevronRight className="h-4 w-4 text-gray-500" />
-                            </button>
-
-                            <div className="my-2 border-t border-neutral-700/50" />
-
                             <button
                                 onClick={handleLogout}
                                 className="w-full flex items-center gap-3 px-3 py-2.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors group"
