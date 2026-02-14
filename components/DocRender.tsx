@@ -2,6 +2,7 @@
 'use client';
 
 import React, { useRef, useState, useMemo } from 'react';
+import { useIsMobile } from '@/hooks/useIsMobile';
 import { Download } from 'lucide-react';
 import ReactMarkdown from "react-markdown";
 import remarkMath from 'remark-math';
@@ -30,6 +31,7 @@ export default function DocRender({ documentBlocks, setDocumentBlocks, onSelecti
     const documentRef = useRef<HTMLDivElement>(null);
     const [showLoginPrompt, setShowLoginPrompt] = useState(false);
     const { isAuthenticated } = useAuth();
+    const isMobile = useIsMobile();
 
     // Group adjacent blocks so that fenced code blocks spanning multiple blocks render correctly
     const renderGroups = useMemo(() => {
@@ -272,12 +274,12 @@ export default function DocRender({ documentBlocks, setDocumentBlocks, onSelecti
               line-height: 1.8;
               background-color: #030712 !important;
               color: #D8A1A1;
-              margin: 2cm auto;
+              margin: 2cm;
               -webkit-print-color-adjust: exact !important;
               print-color-adjust: exact !important;
             }
             
-            /* Markdown element styling matching your preview */
+            
             p { 
               color: #D8A1A1 !important;
               margin-bottom: 1rem;
@@ -444,190 +446,198 @@ export default function DocRender({ documentBlocks, setDocumentBlocks, onSelecti
     };
 
     return (
-        <div className="flex-1 flex flex-col h-screen bg-neutral-900 text-neutral-100 overflow-y-auto scrollbar-hide rounded-2xl border-l-2">
-            <div className="max-w-4xl mx-auto">
+        <div className="flex flex-col h-full bg-neutral-900 text-neutral-100 rounded-b-2xl border-l-2 overflow-hidden">
+            <div className="flex-1 overflow-y-auto scrollbar-hide">
+                <div className={`mx-auto ${isMobile ? 'w-full' : 'max-w-4xl'}`}>
 
-                <button
-                    onClick={exportToPDF}
-                    className="flex items-center gap-2 bg-blue-400 text-white px-4 py-2 h-12 w-12 hover:bg-gray-700 transition rounded-full top-12 absolute opacity-70 right-30"
-                >
-                    <Download size={20} />
-                </button>
-
-                {/* Document Preview */}
-                <div className="flex-1 p-8 overflow-auto">
-                    <div
-                        className="bg-gray-950 mx-auto shadow-2xl"
-                        style={{
-                            maxWidth: '21cm',
-                            width: '100%',
-                            minHeight: '29.7cm',
-                            padding: '2cm',
-                            fontFamily: 'Gochi Hand, cursive'
-                        }}
+                    {/* Hidden PDF export button - triggered from toolbar */}
+                    <button
+                        data-export-pdf
+                        onClick={exportToPDF}
+                        className="sr-only"
+                        aria-hidden="true"
                     >
+                        <Download size={20} />
+                    </button>
+
+                    {/* Document Preview */}
+                    <div className={`flex-1 ${isMobile ? 'p-2' : 'p-8'}`}>
                         <div
-                            ref={documentRef}
-                            onMouseUp={handleMouseUp}
-                            onMouseDown={handleMouseDown}
-                            className="prose max-w-none "
-                            style={{ fontSize: '12px', lineHeight: '1.8' }}
+                            className="bg-gray-950 mx-auto shadow-2xl"
+                            style={{
+                                maxWidth: isMobile ? '100%' : '21cm',
+                                width: '100%',
+                                minHeight: isMobile ? 'auto' : '29.7cm',
+                                padding: isMobile ? '1rem' : '2cm',
+                                fontFamily: 'Gochi Hand, cursive'
+                            }}
                         >
-                            {documentBlocks.length === 0 ? (
-                                <div className="text-gray-400 text-center mt-20">
-                                    Chat with AI to generate document content
-                                </div>
-                            ) : (
-                                renderGroups.map((group) => {
-
-                                    const processedContent = group.content
-                                        .replace(/\\\[/g, '$$')  // Converts \[ to $$
-                                        .replace(/\\]/g, '$$')  // Converts \] to $$
-                                        .replace(/\\\(/g, '$')   // Converts \( to $
-                                        .replace(/\\\)/g, '$');
-
-
-                                    return (
-                                        <div
-                                            key={group.id}
-                                            data-block-id={group.id}
-                                            className="mb-6 select-text cursor-text"
-                                        >
-                                            <ReactMarkdown
-                                                components={{
-                                                    p: ({ children }) => (
-                                                        <p className="text-[#D8A1A1] mb-4 leading-relaxed">
-                                                            {children}
-                                                        </p>
-                                                    ),
-
-                                                    strong: ({ children }) => (
-                                                        <strong className="text-[#F2B8A2] font-semibold">
-                                                            {children}
-                                                        </strong>
-                                                    ),
-
-                                                    em: ({ children }) => (
-                                                        <em className="text-[#C7C7C7] italic">
-                                                            {children}
-                                                        </em>
-                                                    ),
-
-                                                    h1: ({ children }) => (
-                                                        <h1 className="text-[#6EE7E7] text-3xl font-bold mb-4">
-                                                            {children}
-                                                        </h1>
-                                                    ),
-
-                                                    h2: ({ children }) => (
-                                                        <h2 className="text-[#A7F3D0] text-2xl font-semibold mb-3">
-                                                            {children}
-                                                        </h2>
-                                                    ),
-
-                                                    h3: ({ children }) => (
-                                                        <h3 className="text-[#C4B5FD] text-xl font-medium mb-2">
-                                                            {children}
-                                                        </h3>
-                                                    ),
-
-                                                    ul: ({ children }) => (
-                                                        <ul className="list-disc list-inside text-[#D28ADB] mb-4 space-y-1">
-                                                            {children}
-                                                        </ul>
-                                                    ),
-
-                                                    ol: ({ children }) => (
-                                                        <ol className="list-decimal list-inside text-[#D1696F] mb-4 space-y-1">
-                                                            {children}
-                                                        </ol>
-                                                    ),
-
-                                                    li: ({ children }) => (
-                                                        <li className="ml-2">
-                                                            {children}
-                                                        </li>
-                                                    ),
-
-                                                    blockquote: ({ children }) => (
-                                                        <blockquote className="border-l-4 border-[#5FB3A2] pl-4 italic text-[#9DB8A0] mb-4">
-                                                            {children}
-                                                        </blockquote>
-                                                    ),
-
-                                                    code: ({ children }) => (
-                                                        <code className="bg-[#0B1220] text-[#93C5FD] px-1.5 py-0.5 rounded text-sm">
-                                                            {children}
-                                                        </code>
-                                                    ),
-
-                                                    pre: ({ children }) => (
-                                                        <pre className="bg-[#0B1220] text-[#BFC5CC] p-4 rounded-lg overflow-x-auto mb-4">{children}</pre>
-                                                    ),
-
-                                                    a: ({ children, href }) => (
-                                                        <a
-                                                            href={href}
-                                                            className="text-[#6EE7E7] underline underline-offset-4 hover:text-[#93C5FD] transition-colors"
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
-                                                        >
-                                                            {children}
-                                                        </a>
-                                                    ),
-
-                                                    hr: () => (
-                                                        <hr className="border-[#1F2937] my-6" />
-                                                    ),
-                                                    table: ({ children }) => (
-                                                        <div className="overflow-x-auto mb-4">
-                                                            <table className="min-w-full border-collapse border border-[#374151]">
-                                                                {children}
-                                                            </table>
-                                                        </div>
-                                                    ),
-
-                                                    thead: ({ children }) => (
-                                                        <thead className="bg-[#1F2937]">
-                                                            {children}
-                                                        </thead>
-                                                    ),
-
-                                                    tbody: ({ children }) => (
-                                                        <tbody>
-                                                            {children}
-                                                        </tbody>
-                                                    ),
-
-                                                    tr: ({ children }) => (
-                                                        <tr className="border-b border-[#374151]">
-                                                            {children}
-                                                        </tr>
-                                                    ),
-
-                                                    th: ({ children }) => (
-                                                        <th className="px-4 py-2 text-left text-[#A7F3D0] font-semibold border border-[#374151]">
-                                                            {children}
-                                                        </th>
-                                                    ),
-
-                                                    td: ({ children }) => (
-                                                        <td className="px-4 py-2 text-[#D8A1A1] border border-[#374151]">
-                                                            {children}
-                                                        </td>
-                                                    ),
-                                                }}
-                                                remarkPlugins={[remarkMath, remarkGfm]}
-                                                rehypePlugins={[[rehypeKatex, { output: 'html' }]]}
-                                            >
-                                                {processedContent}
-                                            </ReactMarkdown>
+                            <div
+                                ref={documentRef}
+                                onMouseUp={handleMouseUp}
+                                onMouseDown={handleMouseDown}
+                                className="prose max-w-none "
+                                style={{ fontSize: '12px', lineHeight: '1.8' }}
+                            >
+                                {documentBlocks.length === 0 ? (
+                                    <div className="text-gray-400 text-center mt-20">
+                                        Chat with AI to generate document content
+                                    </div>
+                                ) : (
+                                    <>
+                                        {/* UX Hint for selection */}
+                                        <div className="text-xs text-muted-foreground text-center mb-4 flex items-center justify-center gap-1 opacity-70">
+                                            <span>💡</span>
+                                            <span>Select text to edit with AI</span>
                                         </div>
-                                    )
-                                }
+                                        {renderGroups.map((group) => {
+                                            const processedContent = group.content
+                                                .replace(/\\\[/g, '$$')  // Converts \[ to $$
+                                                .replace(/\\]/g, '$$')  // Converts \] to $$
+                                                .replace(/\\\(/g, '$')   // Converts \( to $
+                                                .replace(/\\\)/g, '$');
 
-                                )
-                            )}
+                                            return (
+                                                <div
+                                                    key={group.id}
+                                                    data-block-id={group.id}
+                                                    className="mb-6 select-text cursor-text"
+                                                >
+                                                    <ReactMarkdown
+                                                        components={{
+                                                            p: ({ children }) => (
+                                                                <p className="text-[#D8A1A1] mb-4 leading-relaxed">
+                                                                    {children}
+                                                                </p>
+                                                            ),
+
+                                                            strong: ({ children }) => (
+                                                                <strong className="text-[#F2B8A2] font-semibold">
+                                                                    {children}
+                                                                </strong>
+                                                            ),
+
+                                                            em: ({ children }) => (
+                                                                <em className="text-[#C7C7C7] italic">
+                                                                    {children}
+                                                                </em>
+                                                            ),
+
+                                                            h1: ({ children }) => (
+                                                                <h1 className="text-[#6EE7E7] text-3xl font-bold mb-4">
+                                                                    {children}
+                                                                </h1>
+                                                            ),
+
+                                                            h2: ({ children }) => (
+                                                                <h2 className="text-[#A7F3D0] text-2xl font-semibold mb-3">
+                                                                    {children}
+                                                                </h2>
+                                                            ),
+
+                                                            h3: ({ children }) => (
+                                                                <h3 className="text-[#C4B5FD] text-xl font-medium mb-2">
+                                                                    {children}
+                                                                </h3>
+                                                            ),
+
+                                                            ul: ({ children }) => (
+                                                                <ul className="list-disc list-inside text-[#D28ADB] mb-4 space-y-1">
+                                                                    {children}
+                                                                </ul>
+                                                            ),
+
+                                                            ol: ({ children }) => (
+                                                                <ol className="list-decimal list-inside text-[#D1696F] mb-4 space-y-1">
+                                                                    {children}
+                                                                </ol>
+                                                            ),
+
+                                                            li: ({ children }) => (
+                                                                <li className="ml-2">
+                                                                    {children}
+                                                                </li>
+                                                            ),
+
+                                                            blockquote: ({ children }) => (
+                                                                <blockquote className="border-l-4 border-[#5FB3A2] pl-4 italic text-[#9DB8A0] mb-4">
+                                                                    {children}
+                                                                </blockquote>
+                                                            ),
+
+                                                            code: ({ children }) => (
+                                                                <code className="bg-[#0B1220] text-[#93C5FD] px-1.5 py-0.5 rounded text-sm">
+                                                                    {children}
+                                                                </code>
+                                                            ),
+
+                                                            pre: ({ children }) => (
+                                                                <pre className="bg-[#0B1220] text-[#BFC5CC] p-4 rounded-lg overflow-x-auto mb-4">{children}</pre>
+                                                            ),
+
+                                                            a: ({ children, href }) => (
+                                                                <a
+                                                                    href={href}
+                                                                    className="text-[#6EE7E7] underline underline-offset-4 hover:text-[#93C5FD] transition-colors"
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                >
+                                                                    {children}
+                                                                </a>
+                                                            ),
+
+                                                            hr: () => (
+                                                                <hr className="border-[#1F2937] my-6" />
+                                                            ),
+                                                            table: ({ children }) => (
+                                                                <div className="overflow-x-auto mb-4">
+                                                                    <table className="min-w-full border-collapse border border-[#374151]">
+                                                                        {children}
+                                                                    </table>
+                                                                </div>
+                                                            ),
+
+                                                            thead: ({ children }) => (
+                                                                <thead className="bg-[#1F2937]">
+                                                                    {children}
+                                                                </thead>
+                                                            ),
+
+                                                            tbody: ({ children }) => (
+                                                                <tbody>
+                                                                    {children}
+                                                                </tbody>
+                                                            ),
+
+                                                            tr: ({ children }) => (
+                                                                <tr className="border-b border-[#374151]">
+                                                                    {children}
+                                                                </tr>
+                                                            ),
+
+                                                            th: ({ children }) => (
+                                                                <th className="px-4 py-2 text-left text-[#A7F3D0] font-semibold border border-[#374151]">
+                                                                    {children}
+                                                                </th>
+                                                            ),
+
+                                                            td: ({ children }) => (
+                                                                <td className="px-4 py-2 text-[#D8A1A1] border border-[#374151]">
+                                                                    {children}
+                                                                </td>
+                                                            ),
+                                                        }}
+                                                        remarkPlugins={[remarkMath, remarkGfm]}
+                                                        rehypePlugins={[[rehypeKatex, { output: 'html' }]]}
+                                                    >
+                                                        {processedContent}
+                                                    </ReactMarkdown>
+                                                </div>
+                                            );
+                                        })}
+                                    </>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>

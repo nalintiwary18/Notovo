@@ -17,7 +17,7 @@ import { motion, AnimatePresence } from "framer-motion";
 
 // Inactivity timeout for anonymous sessions (10 minutes)
 const ANONYMOUS_SESSION_TIMEOUT = 10 * 60 * 1000;
-const LAST_ACTIVITY_KEY = 'notova_last_activity';
+const LAST_ACTIVITY_KEY = 'notovo_last_activity';
 
 export function SidebarDemo() {
     const [open, setOpen] = useState(false);
@@ -110,7 +110,7 @@ export function SidebarDemo() {
     return (
         <div
             className={cn(
-                "mx-auto flex flex-1 flex-col overflow-hidden rounded-md border border-neutral-200 bg-gray-100 md:flex-row dark:border-neutral-700 dark:bg-neutral-800",
+                "mx-auto flex flex-1 flex-col overflow-hidden border border-neutral-200 bg-gray-100 md:flex-row dark:border-neutral-700 dark:bg-neutral-800",
                 "h-screen",
             )}
         >
@@ -131,7 +131,7 @@ export function SidebarDemo() {
 
 
                         {/* New Chat Button */}
-                        <div className="mt-6 flex flex-col gap-2 ml-1">
+                        <div className="flex flex-col gap-2 ml-1">
                             {links.map((link, idx) => (
                                 <SidebarLink key={idx} link={link} />
                             ))}
@@ -147,10 +147,15 @@ export function SidebarDemo() {
                                     className="mt-6"
                                 >
                                     {open && (
-                                        <div className="overflow-y-auto scrollbar-hide">
-                                            <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-2 px-2">
-                                                Chats
-                                            </p>
+                                        <div>
+                                        <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-2 px-2">
+                                            Chats
+                                        </p>
+                                        <div
+                                            className="overflow-y-auto overflow-x-hidden max-h-[60vh]"
+                                            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                                        >
+
                                             <div className="flex flex-col gap-1">
                                                 {chatSessions.map((session) => (
                                                     <button
@@ -176,6 +181,7 @@ export function SidebarDemo() {
                                                     </button>
                                                 ))}
                                             </div>
+                                        </div>
                                         </div>
 
 

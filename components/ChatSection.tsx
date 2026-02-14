@@ -2,13 +2,14 @@
 import type React from "react"
 import { useEffect, useRef, useState } from "react"
 import ReactMarkdown from "react-markdown"
-import { Square, Paperclip, ArrowUpCircle, FileText, X, Upload } from "lucide-react"
+import { Square, Paperclip, ArrowUpCircle, FileText, X, Upload, Info, ChevronRight, AlertTriangle } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useUIState } from "@/hooks/useUIState"
 import { useChatStorage } from "@/hooks/useChatStorage"
 import { UserDocument } from "@/lib/supabase"
 import { useAuth } from "@/hooks/AuthContext"
 import LoginPromptModal from "@/components/LoginPromptModal"
+import { classifyIntent, IntentType } from "@/lib/intentTypes"
 
 interface Block {
   id: string
@@ -19,10 +20,14 @@ interface Block {
 interface ChatSectionProps {
   setDocumentBlocks: (blocks: Block[] | ((prev: Block[]) => Block[])) => void
   documentBlocks: Block[]
-  onSaveUploadedDocument?: (fileName: string, fileContent: string, fileType?: string) => Promise<UserDocument | null>
+  onSaveUploadedDocument?: (fileName: string, fileContent: string, fileType?: string, fileSize?: number, userId?: string) => Promise<UserDocument | null>
+  // Version control props
+  currentVersionIndex?: number
+  totalVersions?: number
+  onSwitchToVersion?: (versionIndex: number) => void
 }
 
-export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploadedDocument }: ChatSectionProps) {
+export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploadedDocument, currentVersionIndex, totalVersions, onSwitchToVersion }: ChatSectionProps) {
   const [file, setFile] = useState<File | null>(null)
   const [processedFile, setProcessedFile] = useState<File | null>(null)
   const [showReuploadPrompt, setShowReuploadPrompt] = useState(false)
@@ -38,7 +43,7 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   // Auth state
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, user } = useAuth()
 
   // Use chat storage hook for message persistence
   const {
@@ -50,7 +55,19 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
     isInitialized
   } = useChatStorage()
 
-  const { uiMode, documentReady, selection, openDocument, setDocumentReady, clearSelection } = useUIState()
+  const {
+    uiMode,
+    documentReady,
+    selection,
+    openDocument,
+    setDocumentReady,
+    clearSelection,
+    hasDocument,
+    setHasDocument,
+    isProcessingIntent,
+    setProcessingIntent
+  } = useUIState()
+  const [classifiedIntent, setClassifiedIntent] = useState<IntentType | null>(null)
 
   useEffect(() => {
     // Auto scroll to bottom when messages change
@@ -61,6 +78,22 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
     }
   }, [messages])
 
+  // Helper to prepare messages for API - excludes edit commands and version notifications
+  // Edit messages should only affect their specific edit, not subsequent responses
+  const getMessagesForAPI = (msgs: typeof messages) => {
+    return msgs
+      .filter(m => {
+        // Exclude edit messages (they contain commands like "in tamil" that shouldn't affect subsequent chats)
+        if (m.editMetadata) return false;
+        // Exclude version notification messages (system messages with showOpenDocument)
+        if (m.showOpenDocument) return false;
+        return true;
+      })
+      .map(m => ({
+        role: m.role,
+        content: m.content
+      }))
+  }
 
   const applyEdit = (newText: string, selectionToUse: typeof selection) => {
     console.log('=== applyEdit called ===');
@@ -121,11 +154,23 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
       return;
     }
 
-    // Capture selection before async operation to prevent stale closure
+    // Capture selection and input before async operation to prevent stale closure
     const currentSelection = selection;
+    const editCommand = input.trim();
+
+    // Add user message with editMetadata for persistent preview
+    await addMessage({
+      role: "user",
+      content: editCommand,
+      editMetadata: {
+        selectedText: currentSelection.selectedText,
+        command: editCommand
+      }
+    });
 
     setIsProcessing(true);
     setError('');
+    setInput('');
 
     try {
       const response = await fetch('/api/docrender', {
@@ -136,7 +181,7 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
         body: JSON.stringify({
           // Send the original Markdown so AI can preserve formatting
           selectedText: currentSelection.originalMarkdown,
-          command: input.trim()
+          command: editCommand
         })
       });
 
@@ -153,9 +198,26 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
         throw new Error(data.error);
       }
 
+      // Check if AI returned empty text
+      if (!data.editedText || !data.editedText.trim()) {
+        await addMessage({
+          role: "assistant",
+          content: "⚠️ Couldn't generate the edit. Please try rephrasing your command."
+        });
+        return;
+      }
+
       // Pass the captured selection to applyEdit
       applyEdit(data.editedText, currentSelection);
-      setInput('');
+
+      // Add version button message (edit creates a new version)
+      // Note: totalVersions is the count before this edit, so it becomes the new version index
+      await addMessage({
+        role: "system",
+        content: "",
+        showOpenDocument: true,
+        versionIndex: totalVersions ?? 0,
+      });
 
     } catch (err) {
       setError('Failed to process AI command. Please try again.');
@@ -165,20 +227,54 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
     }
   };
 
-  const handleSend = async () => {
-    if (loading || isProcessing) return;
-    if (!input.trim() && !file) return;
+  // Handle CHAT_ONLY intent - respond in chat only, no document changes
+  const handleChatOnly = async (userMessage: { role: "user" | "assistant"; content: string }) => {
+    setLoading(true)
+    try {
+      const chatInstruction = {
+        role: "system",
+        content: "You are a helpful AI assistant. Keep your responses concise and conversational. Rules:\n" +
+          "- Use plain text ONLY - no markdown formatting\n" +
+          "- NO tables, code blocks, or equations\n" +
+          "- NO bullet points or numbered lists\n" +
+          "- Keep answers brief and to the point\n" +
+          "- Do NOT generate document content or notes\n" +
+          "- If user asks for document/notes generation, politely ask them to rephrase with 'generate notes' or 'create document'"
+      }
 
-    // If there's a selection, use AI edit instead
-    if (selection?.selectedText && input.trim()) {
-      await handleAIEdit();
-      return;
-    }
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: [chatInstruction, ...getMessagesForAPI(messages), { role: 'user', content: userMessage.content }] }),
+      })
 
-    const userMessage: { role: "user" | "assistant"; content: string } = {
-      role: "user",
-      content: input.trim(),
+      if (!res.ok || !res.body) {
+        throw new Error(`HTTP error! status: ${res.status}`)
+      }
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let assistantText = ""
+
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+        assistantText += decoder.decode(value, { stream: true })
+      }
+      assistantText += new TextDecoder().decode()
+
+      // Add response to chat ONLY (not document)
+      await addMessage({ role: "assistant", content: assistantText })
+    } catch (err) {
+      console.error(err)
+      await addMessage({ role: "assistant", content: "Sorry, something went wrong." })
+    } finally {
+      setLoading(false)
     }
+  }
+
+  // Handle DOCUMENT_CREATE intent - generate content for document
+  const handleDocumentCreate = async (userMessage: { role: "user" | "assistant"; content: string }) => {
     const systemInstruction = {
       role: "system",
       content:
@@ -200,48 +296,32 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
         "- Prefer clarity and hierarchy over decoration.\n"
     }
 
-    // Build message content with selection context if present
-    let messageContent = input.trim()
-    if (selection) {
-      messageContent = `[Context from document - Block ${selection.blockId}]: "${selection.selectedText}"\n\n${messageContent}`
-    }
-
-    const userMessageWithContext = {
-      ...userMessage,
-      content: messageContent,
-    }
-
-    // Add message and save to database
-    await addMessage(userMessage)
-    setInput("")
-
-    // Clear selection after sending
-    if (selection) {
-      clearSelection()
-    }
-
     setLoading(true)
-
     try {
       let res: Response
 
       if (file) {
-        // Send with file using FormData
+        // File metadata is now passed via the userMessage in handleSend
+        // No need to track separately as it's persisted with the message
+
+        // Send with file using FormData (strip metadata from messages)
         const formData = new FormData()
         formData.append("file", file)
-        formData.append("messages", JSON.stringify([...messages, userMessageWithContext]))
+        formData.append("messages", JSON.stringify([...getMessagesForAPI(messages), { role: 'user', content: userMessage.content }]))
 
         res = await fetch("/api/chat", {
           method: "POST",
           body: formData,
         })
 
-        // Save uploaded file to Supabase with 1hr TTL
+        // Save uploaded file to Supabase (3hr TTL for logged-in, 1hr for guests)
         if (onSaveUploadedDocument) {
+          const fileSize = file.size
+          const userId = user?.id
           const reader = new FileReader()
           reader.onload = async (e) => {
             const content = e.target?.result as string
-            await onSaveUploadedDocument(file.name, content, file.type)
+            await onSaveUploadedDocument(file.name, content, file.type, fileSize, userId)
           }
           reader.readAsText(file)
         }
@@ -250,13 +330,12 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
         setFile(null)
         setDocumentReady(true)
         setShowReuploadPrompt(false)
-
       } else {
-        // Send without file using JSON
+        // Send without file using JSON (strip metadata from messages)
         res = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messages: [systemInstruction, ...messages, userMessageWithContext] }),
+          body: JSON.stringify({ messages: [systemInstruction, ...getMessagesForAPI(messages), { role: 'user', content: userMessage.content }] }),
         })
       }
 
@@ -266,20 +345,25 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
 
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
-
       let assistantText = ""
 
-      // Read the stream (but don't show in chat)
       while (true) {
         const { value, done } = await reader.read()
         if (done) break
         assistantText += decoder.decode(value, { stream: true })
       }
-
-      // Flush any remaining decoder buffer
       assistantText += new TextDecoder().decode()
 
-      // Add assistant response ONLY to document (not chat)
+      // Check if AI returned empty content
+      if (!assistantText || !assistantText.trim()) {
+        await addMessage({
+          role: "assistant",
+          content: "⚠️ Couldn't generate content. Please try again with a different prompt."
+        });
+        return;
+      }
+
+      // Add to document (not chat)
       const paragraphs = assistantText.split("\n\n").filter((p: string) => p.trim())
       const newBlocks = paragraphs.map((p: string, i: number) => ({
         id: `block-${Date.now()}-${i}`,
@@ -287,19 +371,115 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
         content: p.trim(),
       }))
 
-      setDocumentBlocks((prev) => [...prev, ...newBlocks])
+      if (newBlocks.length === 0) {
+        await addMessage({
+          role: "assistant",
+          content: "⚠️ Couldn't generate content. Please try again with a different prompt."
+        });
+        return;
+      }
 
-      // Save system message to database
+      setDocumentBlocks((prev) => [...prev, ...newBlocks])
+      setHasDocument(true)
+
+      // Notify in chat with version info
+      // Note: The version will be created by MainContent after setDocumentBlocks triggers the version creation
+      // We use totalVersions as the new version index (0-indexed, so totalVersions = next index)
       await addMessage({
         role: "system",
-        content: "✨ Content generated successfully!",
+        content: "",  // Content is replaced by custom rendering
         showOpenDocument: true,
+        versionIndex: totalVersions ?? 0,  // This will be the new version's index
       })
     } catch (err) {
       console.error(err)
-      await addMessage({ role: "assistant", content: "Sorry, something went wrong." })
+      await addMessage({ role: "assistant", content: "⚠️ Something went wrong while generating. Please try your command again." })
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleSend = async () => {
+    if (loading || isProcessing || isProcessingIntent) return;
+    if (!input.trim() && !file) return;
+
+    // If there's a selection, it's always DOCUMENT_EDIT intent
+    if (selection?.selectedText && input.trim()) {
+      await handleAIEdit();
+      return;
+    }
+
+    // Build user message with optional file metadata
+    const userMessage: {
+      role: "user" | "assistant";
+      content: string;
+      fileMetadata?: { fileName: string; fileSize: number; fileType: string };
+    } = {
+      role: "user",
+      content: input.trim(),
+    }
+
+    // Include file metadata if file is attached (for persistent preview)
+    if (file) {
+      userMessage.fileMetadata = {
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type,
+      }
+    }
+
+    // Add user message and clear input
+    await addMessage(userMessage)
+    setInput("")
+
+    // File upload always triggers DOCUMENT_CREATE
+    if (file) {
+      setClassifiedIntent('DOCUMENT_CREATE')
+      await handleDocumentCreate(userMessage)
+      return
+    }
+
+    // Classify intent using AI
+    setProcessingIntent(true)
+    try {
+      const classification = await classifyIntent(
+        userMessage.content,
+        !!selection,
+        !!file,
+        hasDocument || documentBlocks.length > 0
+      )
+
+      setClassifiedIntent(classification.intent)
+      console.log('Intent classified:', classification)
+
+      // Route based on intent
+      switch (classification.intent) {
+        case 'CHAT_ONLY':
+          await handleChatOnly(userMessage)
+          break
+        case 'DOCUMENT_CREATE':
+          await handleDocumentCreate(userMessage)
+          break
+        case 'DOCUMENT_EDIT':
+          // Document edit requires selection - if none, fall back to chat
+          if (!selection) {
+            await addMessage({
+              role: "assistant",
+              content: "💡 To edit the document, please select some text first, then tell me what changes you'd like."
+            })
+          } else {
+            await handleAIEdit()
+          }
+          break
+        default:
+          await handleChatOnly(userMessage)
+      }
+    } catch (err) {
+      console.error('Intent classification error:', err)
+      // Fall back to chat on error
+      await handleChatOnly(userMessage)
+    } finally {
+      setProcessingIntent(false)
     }
   }
 
@@ -414,7 +594,7 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
 
   return (
     <div
-      className={`flex-1 flex flex-col h-screen bg-background text-foreground border-r border-border rounded-2xl relative transition-all duration-200 ${isDragging ? 'ring-2 ring-primary ring-inset' : ''}`}
+      className={`flex-1 flex flex-col h-full bg-background text-foreground border-r border-border rounded-2xl relative transition-all duration-200 ${isDragging ? 'ring-2 ring-primary ring-inset' : ''}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -437,7 +617,7 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
         )}
       </AnimatePresence>
       {/* Messages */}
-      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide">
         <div className="max-w-2xl mx-auto w-full h-full flex flex-col">
           {/* EMPTY STATE */}
           {messages.length === 0 ? (
@@ -466,6 +646,13 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
                   const isUser = m.role === "user"
                   const isSystem = m.role === "system"
 
+                  // Helper to format file size
+                  const formatFileSize = (bytes: number) => {
+                    if (bytes < 1024) return `${bytes} B`
+                    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+                    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+                  }
+
                   return (
                     <motion.div
                       key={i}
@@ -475,26 +662,78 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
                       transition={{ duration: 0.2 }}
                       className={`flex ${isUser ? "justify-end" : "justify-start"}`}
                     >
-                      <div
-                        className={`max-w-[80%] ${isUser
-                          ? "bg-primary text-primary-foreground rounded-2xl px-4 py-3 text-sm md:text-base"
-                          : isSystem
-                            ? "bg-muted text-muted-foreground rounded-2xl px-4 py-3 border border-border text-sm md:text-base max-w-[80%]"
-                            : "w-full text-foreground text-sm md:text-base"
-                          }`}
-                      >
-                        <ReactMarkdown>{m.content}</ReactMarkdown>
-
-                        {/* Open Document Button */}
-                        {isSystem && m.showOpenDocument && uiMode === "chat" && (
-                          <button
-                            onClick={handleOpenDocument}
-                            className="mt-3 flex items-center gap-2 bg-primary text-primary-foreground hover:opacity-90 px-4 py-2 rounded-lg transition-opacity duration-200 text-sm font-medium"
-                          >
-                            <FileText size={16} />
-                            <span>Open Document</span>
-                          </button>
+                      <div className="flex flex-col gap-2 max-w-[80%]">
+                        {/* Edit with AI Preview for User Messages */}
+                        {isUser && m.editMetadata && (
+                          <div className="bg-muted rounded-xl p-3 border border-border">
+                            <div className="text-xs font-semibold text-foreground mb-1">Editing text:</div>
+                            <p className="text-sm text-muted-foreground line-clamp-2">&quot;{truncateText(m.editMetadata.selectedText)}&quot;</p>
+                          </div>
                         )}
+
+                        {/* File Attachment Preview for User Messages (persistent via fileMetadata) */}
+                        {isUser && m.fileMetadata && (
+                          <div className="flex items-center gap-3 bg-muted/50 border border-border rounded-xl px-4 py-3">
+                            <div className="flex-shrink-0 w-10 h-10 bg-muted rounded-lg flex items-center justify-center">
+                              <FileText size={20} className="text-muted-foreground" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-foreground truncate">
+                                {m.fileMetadata.fileName}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {formatFileSize(m.fileMetadata.fileSize)}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Message Content */}
+                        <div
+                          className={`${isUser
+                            ? "bg-primary text-primary-foreground rounded-2xl px-4 py-3 text-sm md:text-base"
+                            : isSystem
+                              ? "bg-muted text-muted-foreground rounded-2xl px-4 py-3 border border-border text-sm md:text-base"
+                              : "w-full text-foreground text-sm md:text-base"
+                            }`}
+                        >
+                          {/* Render version button for system messages with showOpenDocument */}
+                          {isSystem && m.showOpenDocument && m.versionIndex !== undefined ? (
+                            <button
+                              onClick={() => {
+                                // Always allow clicking - even if current, user may want to open document
+                                // Switch to this version (will be no-op if already current)
+                                if (onSwitchToVersion) {
+                                  onSwitchToVersion(m.versionIndex ?? 0);
+                                }
+                                // If in chat mode, open document
+                                if (uiMode === "chat") {
+                                  handleOpenDocument();
+                                }
+                              }}
+                              className="flex items-center gap-3 w-full hover:bg-muted-foreground/10 cursor-pointer transition-colors rounded-lg py-1"
+                            >
+                              <ChevronRight size={18} className="text-muted-foreground" />
+                              <span className="flex-1 text-left text-foreground">Generated Document</span>
+                              <span className="text-sm text-muted-foreground">
+                                v{(m.versionIndex ?? 0) + 1}
+                              </span>
+                            </button>
+                          ) : (
+                            <ReactMarkdown>{m.content}</ReactMarkdown>
+                          )}
+
+                          {/* Open Document Button for versions not yet opened */}
+                          {isSystem && m.showOpenDocument && uiMode === "chat" && m.versionIndex === undefined && (
+                            <button
+                              onClick={handleOpenDocument}
+                              className="mt-3 flex items-center gap-2 bg-primary text-primary-foreground hover:opacity-90 px-4 py-2 rounded-lg transition-opacity duration-200 text-sm font-medium"
+                            >
+                              <FileText size={16} />
+                              <span>Open Document</span>
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </motion.div>
                   )

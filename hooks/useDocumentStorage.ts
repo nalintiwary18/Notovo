@@ -96,16 +96,18 @@ export function useDocumentStorage() {
         }
     }, [sessionId, documentBlocks])
 
-    // Save user uploaded document (1 hour TTL)
+    // Save user uploaded document (3 hour TTL for logged-in, 1 hour for guests)
     const saveUploadedDocument = useCallback(async (
         fileName: string,
         fileContent: string,
-        fileType?: string
+        fileType?: string,
+        fileSize?: number,
+        userId?: string
     ) => {
         if (!sessionId) return null
 
         try {
-            const doc = await saveUserDocument(sessionId, fileName, fileContent, fileType)
+            const doc = await saveUserDocument(sessionId, fileName, fileContent, fileType, fileSize, userId)
             if (doc) {
                 setUserDocuments(prev => [doc, ...prev])
             }

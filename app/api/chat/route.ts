@@ -3,8 +3,6 @@ import { ChatGroq } from "@langchain/groq";
 import { NextResponse } from "next/server";
 import mammoth from "mammoth";
 import { BaseMessage } from "@langchain/core/messages";
-// Using pdf-parse-fork for simpler PDF parsing (legacy API)
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const pdfParse = require('pdf-parse-fork');
 
 const llm = new ChatGroq({
@@ -172,7 +170,7 @@ export async function POST(req: Request) {
   const messagesWithContext: ChatMessage[] = extractedText
     ? [
       {
-        role: "system", content: `You are given the following document content. Use it to answer questions.
+        role: "system", content: `Your are Notovo an AI based study notes generation software. You will be given the following document content. Use it to answer questions.
         Format the information without using markdown table separators.\n\n${extractedText.slice(0, 15000)}`
       },
 
