@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Gochi_Hand } from "next/font/google";
+import { Geist, Geist_Mono,Pangolin } from "next/font/google";
 
 import "./globals.css";
 import "katex/dist/katex.min.css";
