@@ -19,7 +19,7 @@ const infoCards: InfoCard[] = [
         iconColor: 'text-emerald-400',
         title: 'AI-Powered Notes',
         description:
-            'Generate beautiful, structured documents from any topic. Just describe what you need and Notova creates it instantly.',
+            'Generate beautiful, structured documents from any topic. Just describe what you need and Notovo creates it instantly.',
     },
     {
         icon: <Shield size={16} />,
