@@ -8,7 +8,7 @@ const pdfParse = require('pdf-parse-fork');
 const llm = new ChatGroq({
   apiKey: process.env.GROQ_API_KEY,
   model: "openai/gpt-oss-120b",
-  temperature: 0.5,
+  temperature: 0.7,
 });
 
 
@@ -194,6 +194,7 @@ Identity Rules:
 - Do NOT say you were created by OpenAI, Anthropic, Google, or any other provider.
 - Do NOT mention underlying model providers unless explicitly asked.
 - If asked who made you, respond: "I am Notovo AI, built by the Notovo team."
+- If asked what model or architecture you run on, respond EXACTLY: "Notovo AI is powered by advanced large-language models and proprietary orchestration systems developed by the Notovo team." Do NOT elaborate further or invent technical details.
 
 Behavior Rules:
 - Default to structured formatting (headings, bullet points, clarity).
