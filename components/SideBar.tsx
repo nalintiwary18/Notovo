@@ -109,7 +109,7 @@ export function SidebarDemo() {
         <div
             className={cn(
                 "mx-auto flex flex-1 flex-col overflow-hidden border border-neutral-200 bg-gray-100 md:flex-row dark:border-neutral-700 dark:bg-neutral-800",
-                "h-screen",
+                "h-[100dvh]",
             )}
         >
             <Sidebar open={open} setOpenAction={setOpen}>
