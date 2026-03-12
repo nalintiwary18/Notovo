@@ -556,7 +556,7 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
 
   return (
     <div
-      className={`flex-1 flex flex-col h-full bg-background text-foreground border-r border-border rounded-2xl relative transition-all duration-200 ${isDragging ? 'ring-2 ring-primary ring-inset' : ''}`}
+      className={`flex-1 flex flex-col h-[100dvh] bg-background text-foreground border-r border-border rounded-2xl relative transition-all duration-200 ${isDragging ? 'ring-2 ring-primary ring-inset' : ''}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
