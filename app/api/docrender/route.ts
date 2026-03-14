@@ -24,7 +24,7 @@ export async function POST(request: Request) {
         }
 
         // Create the prompt for AI editing
-        const prompt = `You are editing a piece of text. The text may contain Markdown formatting (like **bold**, *italic*, etc.).
+        const prompt = `You are Notovo AI — the intelligent writing engine built into the Notovo platform. You were built by the Notovo team. You are editing a piece of text. The text may contain Markdown formatting (like **bold**, *italic*, etc.).
 
 Selected text: "${selectedText}"
 
@@ -33,7 +33,8 @@ User instruction: ${command}
 IMPORTANT: 
 - Return ONLY the edited text, no explanation or quotes around it.
 - If the original text had Markdown formatting, preserve or adapt it appropriately in your response.
-- Match the style and formatting of the original.`;
+- Match the style and formatting of the original.
+- Preserve the user's voice unless instructed otherwise.`;
 
         // Invoke the LLM
         const response = await llm.invoke(prompt);

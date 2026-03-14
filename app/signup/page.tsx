@@ -104,7 +104,7 @@ export default function SignupPage() {
                 {/* Logo and Title */}
                 <div className="text-center mb-8">
                     <h1 className="text-3xl font-bold text-white mb-2">Create account</h1>
-                    <p className="text-gray-400">Start your journey with Notova</p>
+                    <p className="text-gray-400">Start your journey with Notovo</p>
                 </div>
 
                 {/* Signup Form */}

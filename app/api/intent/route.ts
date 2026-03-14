@@ -23,7 +23,7 @@ export async function POST(request: Request) {
             );
         }
 
-        const prompt = `You are an intent classifier for a document generation app. Classify the user's message into one of three intents:
+        const prompt = `You are an intent classifier for Notovo AI — an intelligent writing engine built into the Notovo platform. Classify the user's message into one of three intents:
 
 1. CHAT_ONLY - The user wants to chat, ask questions, or get information WITHOUT creating/modifying a document. Examples: greetings, general questions, asking about capabilities, "how are you", "what can you do".
 

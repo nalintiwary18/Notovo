@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Gochi_Hand } from "next/font/google";
+import { Geist, Geist_Mono,Pangolin } from "next/font/google";
 
 import "./globals.css";
 import "katex/dist/katex.min.css";
@@ -7,6 +7,13 @@ import { AuthProvider } from "@/hooks/AuthContext";
 import React from "react";
 import { SpeedInsights } from "@vercel/speed-insights/next"
 import { Analytics } from "@vercel/analytics/next";
+<script
+   async
+   defer
+   src="https://www.faurya.com/js/script.js"
+   data-domain="notovo.in"
+   data-website-id="cmmap2t4k0002l404c23aooj7">
+</script>
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -18,8 +25,8 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const gochiHand = Gochi_Hand({
-  variable: "--font-gochi-hand",
+const pangolin = Pangolin({
+  variable: "--font-pangolin",
   weight: "400",
   subsets: ["latin"],
   display: "swap",
@@ -37,13 +44,13 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${gochiHand.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${pangolin.variable} antialiased`}
       >
         <AuthProvider>
           {children}
         </AuthProvider>
         <Analytics />
-      <SpeedInsights />
+        <SpeedInsights />
       </body>
     </html>
   );

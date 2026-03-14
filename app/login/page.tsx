@@ -65,7 +65,7 @@ export default function LoginPage() {
                 {/* Logo and Title */}
                 <div className="text-center mb-8">
                     <h1 className="text-3xl font-bold text-white mb-2">Welcome back</h1>
-                    <p className="text-gray-400">Sign in to continue to Notova</p>
+                    <p className="text-gray-400">Sign in to continue to Notovo</p>
                 </div>
 
                 {/* Login Form */}
