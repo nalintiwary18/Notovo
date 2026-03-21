@@ -1,4 +1,4 @@
-<h1 align="center">🪄 Notovo</h1>
+<h1 align="center">Notovo</h1>
 <p align="center">
 AI-first note workspace — chat to create, edit, version, and export beautiful documents.
 </p>
