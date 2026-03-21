@@ -42,7 +42,7 @@ export default function MainContent() {
         isSaving
     } = useDocumentStorage();
 
-    const { uiMode, setSelection, closeDocument, hasDocument, openDocument } = useUIState();
+    const { uiMode, setSelection, closeDocument, hasDocument, setHasDocument, openDocument } = useUIState();
     const isMobile = useIsMobile();
 
     // UI state for document panel
@@ -93,6 +93,9 @@ export default function MainContent() {
                     const latestVersion = mappedVersions[mappedVersions.length - 1];
                     if (latestVersion?.blocks) {
                         setDocumentBlocks(latestVersion.blocks);
+                        // Signal that a document exists so the mobile
+                        // toggle bar + notes pane become visible on refresh
+                        setHasDocument(true);
                     }
 
                     setCurrentVersionIndex(mappedVersions.length - 1);
