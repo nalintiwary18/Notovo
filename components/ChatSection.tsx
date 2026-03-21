@@ -81,6 +81,7 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
     }
   }, [messages])
 
+
   // Helper to prepare messages for API - excludes edit commands and version notifications
   // Edit messages should only affect their specific edit, not subsequent responses
   const getMessagesForAPI = (msgs: typeof messages) => {
