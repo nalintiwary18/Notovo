@@ -324,7 +324,7 @@ export default function MainContent() {
                         initial={{ opacity: 1 }}
                         animate={{ opacity: 1 }}
                         transition={{ duration: 0.3, ease: "easeIn" }}
-                        className="h-full w-full flex flex-col"
+                        className="h-full w-full flex flex-col pt-14"
                     >
                         {/* Toggle bar — smoothly reveals when document exists */}
 

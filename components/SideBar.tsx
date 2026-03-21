@@ -129,7 +129,7 @@ export function SidebarDemo() {
 
 
                         {/* New Chat Button */}
-                        <div className="flex flex-col gap-2 ml-1">
+                        <div className="flex flex-col gap-2 ml-1 flex-shrink-0">
                             {links.map((link, idx) => (
                                 <SidebarLink key={idx} link={link} />
                             ))}
@@ -142,7 +142,7 @@ export function SidebarDemo() {
                                     initial={{ opacity: 0, height: 0 }}
                                     animate={{ opacity: 1, height: 'auto' }}
                                     exit={{ opacity: 0, height: 0 }}
-                                    className="mt-6"
+                                    className="mt-6 flex-1 min-h-0 flex flex-col"
                                 >
                                     {open && (
                                         <div>
@@ -150,7 +150,7 @@ export function SidebarDemo() {
                                                 Chats
                                             </p>
                                             <div
-                                                className="overflow-y-auto overflow-x-hidden h-[60vh]"
+                                                className="overflow-y-auto overflow-x-hidden flex-1 min-h-0"
                                                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                                             >
 
