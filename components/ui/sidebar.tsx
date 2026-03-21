@@ -2,7 +2,7 @@
 import { cn } from "@/lib/utils";
 import React, { useState, createContext, useContext } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { IconMenu2, IconX } from "@tabler/icons-react";
+import { IconX } from "@tabler/icons-react";
 
 interface Links {
   label: string;
@@ -94,6 +94,9 @@ export const DesktopSidebar = ({
         animate={{
           width: animate ? (open ? "300px" : "60px") : "300px",
         }}
+        transition={{
+          duration: 0.2,
+        }}
         onMouseEnter={() => setOpen(true)}
         onMouseLeave={() => setOpen(false)}
         {...props}
@@ -114,19 +117,24 @@ export const MobileSidebar = ({
     <>
       <div
         className={cn(
-          "h-10 px-4 py-4 flex flex-row md:hidden  items-center justify-between bg-neutral-800 w-full"
+          "h-14 px-4 flex flex-row md:hidden items-center bg-neutral-900 w-full sticky top-0 z-30 "
         )}
         {...props}
       >
-        <div className="flex justify-start z-20 w-full">
-          <IconMenu2
-            className="text-neutral-600"
-            onClick={() => setOpen(!open)}
-          />
-          <h1 className="ml-5 text-neutral-400 font-bold text-lg">
-            Notovo
-          </h1>
-        </div>
+        {/* Hamburger — left */}
+        <button
+          className="z-20 p-1 -ml-1"
+          onClick={() => setOpen(!open)}
+          aria-label="Open menu"
+        >
+          <img src="/menu_icon.svg" alt="Menu" className="w-8 h-8" />
+        </button>
+
+        {/* Centered title — absolute so it stays centered regardless of siblings */}
+        <h1 className="absolute inset-x-0 text-center text-neutral-400 font-bold text-lg pointer-events-none select-none">
+          Notovo
+        </h1>
+
         <AnimatePresence>
           {open && (
             <motion.div
@@ -134,7 +142,7 @@ export const MobileSidebar = ({
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: "-100%", opacity: 0 }}
               transition={{
-                duration: 0.3,
+                duration: 0.4,
                 ease: "easeInOut",
               }}
               className={cn(

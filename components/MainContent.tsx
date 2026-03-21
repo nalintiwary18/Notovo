@@ -42,13 +42,13 @@ export default function MainContent() {
         isSaving
     } = useDocumentStorage();
 
-    const { uiMode, setSelection, closeDocument } = useUIState();
+    const { uiMode, setSelection, closeDocument, hasDocument, setHasDocument, openDocument } = useUIState();
     const isMobile = useIsMobile();
 
     // UI state for document panel
     const [isMaximized, setIsMaximized] = useState(false);
     const [showVersionDropdown, setShowVersionDropdown] = useState(false);
-    const [mobileFocus, setMobileFocus] = useState<'doc' | 'chat'>('doc');
+    const [mobileTab, setMobileTab] = useState<'chat' | 'notes'>('chat');
 
     // Version history state
     const [versions, setVersions] = useState<DocumentVersion[]>([]);
@@ -93,6 +93,9 @@ export default function MainContent() {
                     const latestVersion = mappedVersions[mappedVersions.length - 1];
                     if (latestVersion?.blocks) {
                         setDocumentBlocks(latestVersion.blocks);
+                        // Signal that a document exists so the mobile
+                        // toggle bar + notes pane become visible on refresh
+                        setHasDocument(true);
                     }
 
                     setCurrentVersionIndex(mappedVersions.length - 1);
@@ -248,6 +251,59 @@ export default function MainContent() {
     };
 
 
+    // Auto-switch to Notes tab when document is first generated (mobile only)
+    const prevHasDocumentRef = useRef(hasDocument);
+    useEffect(() => {
+        if (isMobile && hasDocument && !prevHasDocumentRef.current) {
+            setMobileTab('notes');
+            // Also open document mode so the toggle is visible
+            if (uiMode === 'chat') {
+                openDocument();
+            }
+        }
+        prevHasDocumentRef.current = hasDocument;
+    }, [hasDocument, isMobile, uiMode, openDocument]);
+
+    // Sync: when openDocument() is called (e.g. clicking version buttons in chat),
+    // switch mobile tab to notes so the toggle + notes view appear
+    useEffect(() => {
+        if (isMobile && uiMode === 'document') {
+            setMobileTab('notes');
+        }
+    }, [isMobile, uiMode]);
+
+    // Mobile toggle bar component
+    const MobileToggleBar = () => (
+        <div
+            className="flex-shrink-0 px-4 pt-2 pb-1 bg-neutral-950"
+        >
+            <div className="flex bg-neutral-900 rounded-xl p-1 border border-gray-700/50">
+                <button
+                    onClick={() => {
+                        setMobileTab('chat');
+                    }}
+                    className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all duration-300 ${mobileTab === 'chat'
+                        ? 'bg-gray-800 text-white shadow-sm'
+                        : 'text-gray-400 hover:text-gray-300'
+                        }`}
+                >
+                    Chat
+                </button>
+                <button
+                    onClick={() => {
+                        setMobileTab('notes');
+                        if (uiMode === 'chat') openDocument();
+                    }}
+                    className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all duration-300 ${mobileTab === 'notes'
+                        ? 'bg-gray-800 text-white shadow-sm'
+                        : 'text-gray-400 hover:text-gray-300'
+                        }`}
+                >
+                    Notes
+                </button>
+            </div>
+        </div>
+    );
 
 
     return (
@@ -261,8 +317,126 @@ export default function MainContent() {
             )}
 
             <AnimatePresence mode="wait">
-                {uiMode === 'chat' ? (
-                    // Chat-only mode: full width chat
+                {isMobile ? (
+                    // ===== MOBILE: Full-screen tabbed view =====
+                    <motion.div
+                        key="mobile-view"
+                        initial={{ opacity: 1 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ duration: 0.3, ease: "easeIn" }}
+                        className="h-full w-full flex flex-col"
+                    >
+                        {/* Toggle bar — smoothly reveals when document exists */}
+
+                        {hasDocument && <MobileToggleBar />}
+
+
+                        {/* Tab content — both always mounted, toggled via CSS */}
+                        <div
+                            className="flex-1 overflow-y-auto scrollbar-hide bg-gray-800"
+                            style={{ display: (mobileTab === 'chat' || !hasDocument) ? 'flex' : 'none' }}
+                        >
+                            <Chat
+                                setDocumentBlocks={handleSetDocumentBlocks}
+                                documentBlocks={documentBlocks as Block[]}
+                                onSaveUploadedDocument={saveUploadedDocument}
+                                currentVersionIndex={currentVersionIndex}
+                                totalVersions={versions.length}
+                                onSwitchToVersion={handleSwitchToVersion}
+                                onViewDocument={() => {
+                                    setMobileTab('notes');
+                                    if (uiMode === 'chat') openDocument();
+                                }}
+                            />
+                        </div>
+
+                        <div
+                            className="flex-1 flex flex-col bg-gray-900 overflow-hidden"
+                            style={{ display: (mobileTab === 'notes' && hasDocument) ? 'flex' : 'none' }}
+                        >
+                            {/* Document Toolbar */}
+                            <div className="flex-shrink-0 z-10 bg-neutral-900 backdrop-blur-md border-b border-gray-700/50 px-3 py-2">
+                                <div className="flex items-center justify-between">
+                                    {/* Left: Back to chat */}
+                                    <button
+                                        onClick={() => {
+                                            setMobileTab('chat');
+                                        }}
+                                        className="p-2 rounded-lg hover:bg-gray-700/50 text-gray-400 hover:text-gray-200 transition-colors"
+                                        title="Back to chat"
+                                    >
+                                        <ChevronLeft size={18} />
+                                    </button>
+
+                                    {/* Center: Download + Version dropdown */}
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={() => {
+                                                const downloadBtn = document.querySelector('[data-export-pdf]') as HTMLButtonElement;
+                                                downloadBtn?.click();
+                                            }}
+                                            className="p-2 rounded-lg hover:bg-gray-700/50 text-gray-400 hover:text-gray-200 transition-colors"
+                                            title="Download PDF"
+                                        >
+                                            <Download size={18} />
+                                        </button>
+
+                                        {/* Version dropdown */}
+                                        <div className="relative">
+                                            <button
+                                                onClick={() => setShowVersionDropdown(!showVersionDropdown)}
+                                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-600/50 text-sm font-medium text-gray-300 transition-colors"
+                                            >
+                                                <span>V{versions.length > 0 ? currentVersionIndex + 1 : 1}</span>
+                                                <ChevronDown size={14} className={`transition-transform ${showVersionDropdown ? 'rotate-180' : ''}`} />
+                                            </button>
+
+                                            {showVersionDropdown && versions.length > 0 && (
+                                                <div className="absolute top-full left-0 mt-1 bg-gray-800 border border-gray-600/50 rounded-lg shadow-xl py-1 min-w-[120px] z-20">
+                                                    {versions.map((_, idx) => (
+                                                        <button
+                                                            key={idx}
+                                                            onClick={() => {
+                                                                const version = versions[idx];
+                                                                if (version) {
+                                                                    setDocumentBlocks(version.blocks);
+                                                                    setCurrentVersionIndex(idx);
+                                                                }
+                                                                setShowVersionDropdown(false);
+                                                            }}
+                                                            className={`w-full text-left px-3 py-1.5 text-sm transition-colors ${idx === currentVersionIndex ? 'bg-primary/20 text-primary' : 'text-gray-300 hover:bg-gray-700'}`}
+                                                        >
+                                                            Version {idx + 1}
+                                                            {idx === versions.length - 1 && <span className="ml-2 text-xs text-gray-500">(latest)</span>}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Right: Maximize button */}
+                                    <button
+                                        onClick={() => setIsMaximized(true)}
+                                        className="p-2 rounded-lg hover:bg-gray-700/50 text-gray-400 hover:text-gray-200 transition-colors"
+                                        title="Maximize"
+                                    >
+                                        <Maximize2 size={18} />
+                                    </button>
+                                </div>
+                            </div>
+                            {/* Document content */}
+                            <div className="flex-1 overflow-y-auto scrollbar-hide">
+                                <DocRender
+                                    documentBlocks={documentBlocks as Block[]}
+                                    setDocumentBlocks={handleSetDocumentBlocks}
+                                    onSelectionChange={handleSelectionChange}
+                                />
+                            </div>
+                        </div>
+                    </motion.div>
+                ) : uiMode === 'chat' ? (
+                    // ===== DESKTOP: Chat-only mode =====
                     <motion.div
                         key="chat-only"
                         initial={{ opacity: 1 }}
@@ -271,7 +445,6 @@ export default function MainContent() {
                         transition={{ duration: 0.3, ease: "easeInOut" }}
                         className="h-full w-full flex flex-col"
                     >
-
                         <div className="flex-1 overflow-y-auto scrollbar-hide bg-gray-800">
                             <Chat
                                 setDocumentBlocks={handleSetDocumentBlocks}
@@ -283,208 +456,7 @@ export default function MainContent() {
                             />
                         </div>
                     </motion.div>
-                ) : isMobile ? (
-                    // Mobile Document mode: stacked layout (document on top, chat below)
-                    <motion.div
-                        key="document-mode"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.3, ease: "easeInOut" }}
-                        className="h-full w-full"
-                    >
-                        {isMaximized ? (
-                            // Maximized: Document takes full width
-                            <div className="h-full flex flex-col bg-gray-800 relative">
-                                {/* Enhanced Document Toolbar */}
-                                <div className="flex-shrink-0 z-10 bg-neutral-900 backdrop-blur-md border-b border-gray-700/50 px-3 py-2">
-                                    <div className="flex items-center justify-between">
-                                        {/* Left: Close button */}
-                                        <button
-                                            onClick={closeDocument}
-                                            className="p-2 rounded-lg hover:bg-gray-700/50 text-gray-400 hover:text-gray-200 transition-colors"
-                                            title="Close document"
-                                        >
-                                            <ChevronLeft size={18} />
-                                        </button>
 
-                                        {/* Center: Download + Version dropdown */}
-                                        <div className="flex items-center gap-2">
-                                            <button
-                                                onClick={() => {
-                                                    const downloadBtn = document.querySelector('[data-export-pdf]') as HTMLButtonElement;
-                                                    downloadBtn?.click();
-                                                }}
-                                                className="p-2 rounded-lg hover:bg-gray-700/50 text-gray-400 hover:text-gray-200 transition-colors"
-                                                title="Download PDF"
-                                            >
-                                                <Download size={18} />
-                                            </button>
-
-                                            {/* Version dropdown */}
-                                            <div className="relative">
-                                                <button
-                                                    onClick={() => setShowVersionDropdown(!showVersionDropdown)}
-                                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-600/50 text-sm font-medium text-gray-300 transition-colors"
-                                                >
-                                                    <span>V{versions.length > 0 ? currentVersionIndex + 1 : 1}</span>
-                                                    <ChevronDown size={14} className={`transition-transform ${showVersionDropdown ? 'rotate-180' : ''}`} />
-                                                </button>
-
-                                                {showVersionDropdown && versions.length > 0 && (
-                                                    <div className="absolute top-full left-0 mt-1 bg-gray-800 border border-gray-600/50 rounded-lg shadow-xl py-1 min-w-[120px] z-20">
-                                                        {versions.map((_, idx) => (
-                                                            <button
-                                                                key={idx}
-                                                                onClick={() => {
-                                                                    const version = versions[idx];
-                                                                    if (version) {
-                                                                        setDocumentBlocks(version.blocks);
-                                                                        setCurrentVersionIndex(idx);
-                                                                    }
-                                                                    setShowVersionDropdown(false);
-                                                                }}
-                                                                className={`w-full text-left px-3 py-1.5 text-sm transition-colors ${idx === currentVersionIndex ? 'bg-primary/20 text-primary' : 'text-gray-300 hover:bg-gray-700'}`}
-                                                            >
-                                                                Version {idx + 1}
-                                                                {idx === versions.length - 1 && <span className="ml-2 text-xs text-gray-500">(latest)</span>}
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        {/* Right: Minimize button */}
-                                        <button
-                                            onClick={() => setIsMaximized(false)}
-                                            className="p-2 rounded-lg hover:bg-gray-700/50 text-gray-400 hover:text-gray-200 transition-colors"
-                                            title="Exit fullscreen"
-                                        >
-                                            <Minimize2 size={18} />
-                                        </button>
-                                    </div>
-                                </div>
-                                <div className="flex-1 overflow-y-auto scrollbar-hide">
-                                    <DocRender
-                                        documentBlocks={documentBlocks as Block[]}
-                                        setDocumentBlocks={handleSetDocumentBlocks}
-                                        onSelectionChange={handleSelectionChange}
-                                    />
-                                </div>
-                            </div>
-                        ) : (
-                            // Normal mobile: Stacked layout — doc on top, chat below
-                            <div className="h-full flex flex-col">
-                                {/* Document section */}
-                                <div
-                                    className="flex flex-col bg-gray-800 relative border-b border-gray-700/50"
-                                    style={{
-                                        height: mobileFocus === 'doc' ? '60dvh' : '40dvh',
-                                        transition: 'height 0.35s cubic-bezier(0.4, 0, 0.2, 1)'
-                                    }}
-                                    onClick={() => mobileFocus !== 'doc' && setMobileFocus('doc')}
-                                >
-                                    {/* Document Toolbar */}
-                                    <div className="flex-shrink-0 bg-neutral-900 backdrop-blur-md border-b border-gray-700/50 px-3 py-2">
-                                        <div className="flex items-center justify-between">
-                                            {/* Left: Close button */}
-                                            <button
-                                                onClick={closeDocument}
-                                                className="p-2 rounded-lg hover:bg-gray-700/50 text-gray-400 hover:text-gray-200 transition-colors"
-                                                title="Close document"
-                                            >
-                                                <ChevronLeft size={18} />
-                                            </button>
-
-                                            {/* Center: Download + Version dropdown */}
-                                            <div className="flex items-center gap-2">
-                                                <button
-                                                    onClick={() => {
-                                                        const downloadBtn = document.querySelector('[data-export-pdf]') as HTMLButtonElement;
-                                                        downloadBtn?.click();
-                                                    }}
-                                                    className="p-2 rounded-lg hover:bg-gray-700/50 text-gray-400 hover:text-gray-200 transition-colors"
-                                                    title="Download PDF"
-                                                >
-                                                    <Download size={18} />
-                                                </button>
-
-                                                {/* Version dropdown */}
-                                                <div className="relative">
-                                                    <button
-                                                        onClick={() => setShowVersionDropdown(!showVersionDropdown)}
-                                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-600/50 text-sm font-medium text-gray-300 transition-colors"
-                                                    >
-                                                        <span>V{versions.length > 0 ? currentVersionIndex + 1 : 1}</span>
-                                                        <ChevronDown size={14} className={`transition-transform ${showVersionDropdown ? 'rotate-180' : ''}`} />
-                                                    </button>
-
-                                                    {showVersionDropdown && versions.length > 0 && (
-                                                        <div className="absolute top-full left-0 mt-1 bg-gray-800 border border-gray-600/50 rounded-lg shadow-xl py-1 min-w-[120px] z-20">
-                                                            {versions.map((_, idx) => (
-                                                                <button
-                                                                    key={idx}
-                                                                    onClick={() => {
-                                                                        const version = versions[idx];
-                                                                        if (version) {
-                                                                            setDocumentBlocks(version.blocks);
-                                                                            setCurrentVersionIndex(idx);
-                                                                        }
-                                                                        setShowVersionDropdown(false);
-                                                                    }}
-                                                                    className={`w-full text-left px-3 py-1.5 text-sm transition-colors ${idx === currentVersionIndex ? 'bg-primary/20 text-primary' : 'text-gray-300 hover:bg-gray-700'}`}
-                                                                >
-                                                                    Version {idx + 1}
-                                                                    {idx === versions.length - 1 && <span className="ml-2 text-xs text-gray-500">(latest)</span>}
-                                                                </button>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            {/* Right: Maximize button */}
-                                            <button
-                                                onClick={() => setIsMaximized(true)}
-                                                className="p-2 rounded-lg hover:bg-gray-700/50 text-gray-400 hover:text-gray-200 transition-colors"
-                                                title="Maximize"
-                                            >
-                                                <Maximize2 size={18} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                    {/* Document content — scrolls independently */}
-                                    <div className="flex-1 overflow-y-auto scrollbar-hide">
-                                        <DocRender
-                                            documentBlocks={documentBlocks as Block[]}
-                                            setDocumentBlocks={handleSetDocumentBlocks}
-                                            onSelectionChange={handleSelectionChange}
-                                        />
-                                    </div>
-                                </div>
-
-                                {/* Chat section */}
-                                <div
-                                    className="overflow-hidden bg-gray-800"
-                                    style={{
-                                        height: mobileFocus === 'chat' ? '60dvh' : '40dvh',
-                                        transition: 'height 0.35s cubic-bezier(0.4, 0, 0.2, 1)'
-                                    }}
-                                    onClick={() => mobileFocus !== 'chat' && setMobileFocus('chat')}
-                                >
-                                    <Chat
-                                        setDocumentBlocks={handleSetDocumentBlocks}
-                                        documentBlocks={documentBlocks as Block[]}
-                                        onSaveUploadedDocument={saveUploadedDocument}
-                                        currentVersionIndex={currentVersionIndex}
-                                        totalVersions={versions.length}
-                                        onSwitchToVersion={handleSwitchToVersion}
-                                    />
-                                </div>
-                            </div>
-                        )}
-                    </motion.div>
                 ) : (
                     // Desktop Document mode: split screen with chat on left, document on right
                     <motion.div
@@ -687,3 +659,4 @@ export default function MainContent() {
         </div>
     );
 }
+
