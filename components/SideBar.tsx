@@ -118,10 +118,10 @@ export function SidebarDemo() {
                         {/* Logo */}
                         <div className=" h-24">
                             <Image
-                                src="/logo.svg"
-                                width="50"
+                                src="/mascot.svg"
+                                width={50}
                                 height={50}
-                                alt="Logo"
+                                alt="Notovo Logo"
                                 onClick={() => setOpen(!open)}
                                 className="cursor-pointer "
                             />
@@ -150,7 +150,7 @@ export function SidebarDemo() {
                                                 Chats
                                             </p>
                                             <div
-                                                className="overflow-y-auto overflow-x-hidden max-h-[60vh]"
+                                                className="overflow-y-auto overflow-x-hidden h-[60vh]"
                                                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                                             >
 

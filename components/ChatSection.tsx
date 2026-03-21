@@ -10,6 +10,7 @@ import { UserDocument } from "@/lib/supabase"
 import { useAuth } from "@/hooks/AuthContext"
 import LoginPromptModal from "@/components/LoginPromptModal"
 import { classifyIntent, IntentType } from "@/lib/intentTypes"
+import Image from "next/image"
 
 interface Block {
   id: string
@@ -25,9 +26,10 @@ interface ChatSectionProps {
   currentVersionIndex?: number
   totalVersions?: number
   onSwitchToVersion?: (versionIndex: number) => void
+  onViewDocument?: () => void
 }
 
-export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploadedDocument, currentVersionIndex, totalVersions, onSwitchToVersion }: ChatSectionProps) {
+export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploadedDocument, currentVersionIndex, totalVersions, onSwitchToVersion, onViewDocument }: ChatSectionProps) {
   const [file, setFile] = useState<File | null>(null)
   const [processedFile, setProcessedFile] = useState<File | null>(null)
   const [showReuploadPrompt, setShowReuploadPrompt] = useState(false)
@@ -484,8 +486,10 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
     }
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement | HTMLInputElement>) => {
+    // On mobile, Enter creates a new line; on desktop, Enter sends (Shift+Enter for new line)
+    const isMobileViewport = typeof window !== 'undefined' && window.innerWidth < 768
+    if (e.key === "Enter" && !e.shiftKey && !isMobileViewport) {
       e.preventDefault()
       handleSend()
     }
@@ -556,7 +560,7 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
 
   return (
     <div
-      className={`flex-1 flex flex-col h-full bg-background text-foreground border-r border-border rounded-2xl relative transition-all duration-200 ${isDragging ? 'ring-2 ring-primary ring-inset' : ''}`}
+      className={`flex-1 flex flex-col h-full bg-background text-foreground border-r border-border relative transition-all duration-200 ${isDragging ? 'ring-2 ring-primary ring-inset' : ''}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -587,11 +591,22 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}
-              className="flex-1 flex flex-col justify-center px-4 py-8"
+              className="flex-1 flex flex-col justify-center items-center px-4 py-8"
             >
-              <h1 className="text-5xl md:text-2xl font-semibold tracking-tight text-foreground mb-3">Hi {displayName}</h1>
-              <p className="text-lg md:text-6xl text-muted-foreground">Where should we start?</p>
-
+              {/* Mobile: mascot + study prompt */}
+              <div className="flex flex-col items-center md:hidden">
+                <Image src="/figma-assets/mascot.svg" alt="Notovo mascot" width={96}
+                  height={96}
+                  className="mb-6" />
+                <p className="text-lg text-neutral-500 text-center">What are we studying today?</p>
+              </div>
+              {/* Desktop: original greeting */}
+              <div className="hidden md:block flex-wrap items-center ">
+                <Image src="/figma-assets/mascot.svg" alt="Notovo mascot" width={250}
+                       height={200}
+                       className="mb-6 pl-10" />
+                <p className="text-2xl text-neutral-500">What are we studying today?</p>
+              </div>
             </motion.div>
           ) : (
             <div className="py-8 space-y-6 px-4">
@@ -655,13 +670,14 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
                           {isSystem && m.showOpenDocument && m.versionIndex !== undefined ? (
                             <button
                               onClick={() => {
-                                // Always allow clicking - even if current, user may want to open document
-                                // Switch to this version (will be no-op if already current)
+                                // Switch to this version
                                 if (onSwitchToVersion) {
                                   onSwitchToVersion(m.versionIndex ?? 0);
                                 }
-                                // If in chat mode, open document
-                                if (uiMode === "chat") {
+                                // Open document view (onViewDocument for mobile, handleOpenDocument for desktop)
+                                if (onViewDocument) {
+                                  onViewDocument();
+                                } else {
                                   handleOpenDocument();
                                 }
                               }}
@@ -678,9 +694,9 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
                           )}
 
                           {/* Open Document Button for versions not yet opened */}
-                          {isSystem && m.showOpenDocument && uiMode === "chat" && m.versionIndex === undefined && (
+                          {isSystem && m.showOpenDocument && m.versionIndex === undefined && (
                             <button
-                              onClick={handleOpenDocument}
+                              onClick={() => onViewDocument ? onViewDocument() : handleOpenDocument()}
                               className="mt-3 flex items-center gap-2 bg-primary text-primary-foreground hover:opacity-90 px-4 py-2 rounded-lg transition-opacity duration-200 text-sm font-medium"
                             >
                               <FileText size={16} />
@@ -781,7 +797,46 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
           )}
         </AnimatePresence>
 
-        <div className="bg-muted rounded-2xl p-1 border border-border transition-all duration-200 hover:border-border/80 focus-within:border-primary/50">
+        {/* ===== MOBILE INPUT BAR ===== */}
+        <div className="flex md:hidden items-center gap-3">
+          {/* Add / Attach button */}
+          <label
+            className="flex-shrink-0 w-11 h-11 rounded-full bg-neutral-800 flex items-center justify-center cursor-pointer active:scale-95 transition-transform"
+            title="Attach file"
+          >
+            <img src="/add_icon.svg" alt="Attach" className="w-6 h-6" />
+            <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx" hidden onChange={handleFileChange} />
+          </label>
+
+          {/* Text input */}
+          <div className="flex-1 bg-neutral-800 rounded-full px-5 py-3">
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={selection ? "Edit selected text..." : "Ask notovo"}
+              className="w-full bg-transparent text-foreground placeholder:text-neutral-500 focus:outline-none text-base"
+            />
+          </div>
+
+          {/* Send button */}
+          <button
+            onClick={handleSend}
+            disabled={(loading || isProcessing) || (!input.trim() && !file)}
+            className="flex-shrink-0 w-11 h-11 rounded-full bg-neutral-800 flex items-center justify-center active:scale-95 transition-transform disabled:opacity-40"
+            title="Send message"
+          >
+            {(loading || isProcessing) ? (
+              <Square size={18} className="text-neutral-500 animate-pulse" />
+            ) : (
+              <img src="/send_icon.svg" alt="Send" className="w-6 h-6" />
+            )}
+          </button>
+        </div>
+
+        {/* ===== DESKTOP INPUT BAR (unchanged) ===== */}
+        <div className="hidden md:block bg-muted rounded-2xl p-1 border border-border transition-all duration-200 hover:border-border/80 focus-within:border-primary/50">
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -818,7 +873,7 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
           </div>
         </div>
         <p className="text-[10px] text-neutral-600 text-center py-1 select-none">
-          Notovo can make mistakes. Verify important information.
+          Notovo can make mistakes. Check important info
         </p>
       </div>
 
