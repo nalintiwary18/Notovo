@@ -81,26 +81,6 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
     }
   }, [messages])
 
-  // Track virtual keyboard height via visualViewport API
-  const [keyboardOffset, setKeyboardOffset] = useState(0)
-  useEffect(() => {
-    const vv = typeof window !== 'undefined' ? window.visualViewport : null
-    if (!vv) return
-
-    const onResize = () => {
-      // Keyboard height = full window height minus the visual viewport height
-      const offset = Math.max(0, window.innerHeight - vv.height)
-      setKeyboardOffset(offset)
-
-      // Auto-scroll chat to bottom when keyboard opens
-      if (offset > 0 && endRef.current) {
-        endRef.current.scrollIntoView({ behavior: "smooth", block: "end" })
-      }
-    }
-
-    vv.addEventListener('resize', onResize)
-    return () => vv.removeEventListener('resize', onResize)
-  }, [])
 
   // Helper to prepare messages for API - excludes edit commands and version notifications
   // Edit messages should only affect their specific edit, not subsequent responses
@@ -785,13 +765,7 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
       )}
 
       {/* INPUT BAR */}
-      <div
-        className="w-full max-w-2xl mx-auto px-4 pb-4 self-center"
-        style={{
-          paddingBottom: keyboardOffset > 0 ? `${keyboardOffset}px` : undefined,
-          transition: 'padding-bottom 0.1s ease-out',
-        }}
-      >
+      <div className="w-full max-w-2xl mx-auto px-4 pb-4 self-center">
         <AnimatePresence>
           {file && (
             <motion.div
