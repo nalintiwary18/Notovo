@@ -13,6 +13,7 @@ import { classifyIntent, IntentType } from "@/lib/intentTypes"
 import Image from "next/image"
 import { Plus, Check } from "lucide-react"
 import { PlanningStepsDisplay } from "@/components/ui/planning-steps-display"
+import { ThinkingBar } from "@/components/ui/thinking-bar"
 interface Block {
   id: string
   type: "paragraph"
@@ -430,19 +431,13 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
         return
       }
 
-      const paragraphs = assistantText.split("\n\n").filter((p: string) => p.trim())
-      const newBlocks = paragraphs.map((p: string, i: number) => ({
-        id: `block-${Date.now()}-${i}`,
+      const newBlock = {
+        id: `block-${Date.now()}-0`,
         type: "paragraph" as const,
-        content: p.trim(),
-      }))
-
-      if (newBlocks.length === 0) {
-        await addMessage({ role: "assistant", content: "⚠️ Couldn't generate content. Please try again with a different prompt." })
-        return
+        content: assistantText.trim(),
       }
 
-      setDocumentBlocks((prev) => [...prev, ...newBlocks])
+      setDocumentBlocks((prev) => [...prev, newBlock])
       setHasDocument(true)
 
       await addMessage({ role: "system", content: "", showOpenDocument: true, versionIndex: totalVersions ?? 0 })
@@ -491,6 +486,55 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
     if (file) {
       setClassifiedIntent('DOCUMENT_CREATE')
       await handleDocumentCreate(userMessage)
+      return
+    }
+
+    // Thinking / Planning modes bypass local classification entirely.
+    // The pipeline classifies intent internally and returns it so we know
+    // whether to put the output into the document or the chat.
+    if (isThinkingMode || isPlanningMode) {
+      setLoading(true)
+      try {
+        const endpoint = isThinkingMode ? "/api/thinking" : "/api/planning"
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: [...getMessagesForAPI(messages), { role: "user", content: userMessage.content }],
+          }),
+        })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const data = await res.json()
+        const output = (data.output || "").trim()
+        const pipelineIntent: string = data.intent || ""
+
+        if (!output) {
+          await addMessage({ role: "assistant", content: "⚠️ Couldn't generate content. Please try again." })
+          return
+        }
+
+        const isNotesOutput = isThinkingMode
+          ? pipelineIntent === "notes"
+          : pipelineIntent === "notes_generation"
+
+        if (isNotesOutput) {
+          const newBlock = {
+            id: `block-${Date.now()}-0`,
+            type: "paragraph" as const,
+            content: output,
+          }
+          setDocumentBlocks((prev) => [...prev, newBlock])
+          setHasDocument(true)
+          await addMessage({ role: "system", content: "", showOpenDocument: true, versionIndex: totalVersions ?? 0 })
+        } else {
+          await addMessage({ role: "assistant", content: output })
+        }
+      } catch (err) {
+        console.error(err)
+        await addMessage({ role: "assistant", content: "⚠️ Something went wrong. Please try again." })
+      } finally {
+        setLoading(false)
+      }
       return
     }
 
@@ -764,9 +808,13 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
 
               {/* LOADING */}
               {loading && (
-                <div className="flex justify-start">
+                <div className="flex justify-start w-full">
                   {isPlanningMode ? (
                     <PlanningStepsDisplay isRunning={loading} />
+                  ) : isThinkingMode ? (
+                    <div className="py-4 w-full max-w-xs">
+                      <ThinkingBar text="Thinking..." />
+                    </div>
                   ) : (
                     <div className="flex gap-2 py-4">
                       <span

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { plannerWorkflow } from "@/lib/langgraph/planning/graph";
 
 export const runtime = "nodejs";
+export const maxDuration = 120;
 
 export async function POST(req: Request) {
   try {
@@ -11,7 +12,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "messages array required" }, { status: 400 });
     }
 
-    const result = await plannerWorkflow.invoke({ messages });
+    const result = await plannerWorkflow.invoke({ messages }, { recursionLimit: 50 });
 
     return NextResponse.json({
       output: result.finalNotes,

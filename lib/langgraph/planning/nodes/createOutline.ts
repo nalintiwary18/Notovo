@@ -8,18 +8,18 @@ export const createOutline = async (state: typeof PlannerState.State) => {
   const prompt = `You are Notovo AI — a world-class educational content planner. The user has requested notes or a document.
 
 Your task is to produce a JSON response with the following fields:
-- "outline": an array of section titles (strings) that will form the document
+- "outline": an array of 3 to 4 section titles (strings) that will form the document
 - "difficultyLevel": one of "beginner", "intermediate", or "advanced" (infer from context)
 - "stylePreference": one of "concise", "detailed", or "comprehensive" (infer from context)
 
-The outline should have between 4 and 8 sections. Each section title should be clear and descriptive.
+Keep the outline to exactly 3-4 sections. Each section title should be clear and descriptive.
 
 User request: "${userContent}"
 
 Respond ONLY with valid JSON. No preamble, no markdown fences.
 
 Example:
-{"outline":["Introduction","Core Concepts","Key Mechanisms","Practical Applications","Summary"],"difficultyLevel":"intermediate","stylePreference":"detailed"}`;
+{"outline":["Introduction","Core Concepts","Practical Applications","Summary"],"difficultyLevel":"intermediate","stylePreference":"detailed"}`;
 
   const response = await plannerLLM.invoke(prompt);
   const raw = typeof response.content === "string" ? response.content.trim() : "{}";

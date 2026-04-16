@@ -12,31 +12,38 @@ export const generateSection = async (state: typeof PlannerState.State) => {
 
   const previousContext =
     state.doneSections.length > 0
-      ? `Previously completed sections:\n${state.doneSections.join("\n\n---\n\n")}\n\n`
+      ? `Previously completed sections for context:\n${state.doneSections.join("\n\n")}\n\n`
       : "";
 
   const systemPrompt = {
     role: "system",
-    content:
-      `You are Notovo AI — a world-class note-generation engine. You were built by the Notovo team.\n\n` +
-      `You are generating ONE section of a larger notes document.\n\n` +
-      `Difficulty level: ${state.difficultyLevel}\n` +
-      `Style: ${state.stylePreference}\n\n` +
-      `Rules:\n` +
-      `- Start with the section heading as ## (h2)\n` +
-      `- Use ### for subsections if needed\n` +
-      `- Use bullet points, bold key terms, and examples\n` +
-      `- Match the difficulty and style specified above\n` +
-      `- Do NOT include a document title or introduction — just this section\n` +
-      `- Keep the section self-contained but coherent with completed sections`,
+    content: [
+      "You are Notovo AI — a world-class note-generation engine built by the Notovo team.",
+      `You are generating ONE section of a multi-section notes document.`,
+      `Difficulty level: ${state.difficultyLevel}`,
+      `Style: ${state.stylePreference}`,
+      "",
+      "MANDATORY FORMATTING RULES — follow exactly:",
+      "- Start with ## followed by the section title (e.g. ## Core Concepts)",
+      "- Use ### for subsections within this section",
+      "- Use **bold** for key terms and important phrases",
+      "- Use *italic* sparingly for definitions",
+      "- Use - bullet lists for grouped facts or properties",
+      "- Use numbered lists for sequential steps",
+      "- Use > blockquotes for key takeaways or callouts",
+      "- Separate sub-sections with a blank line",
+      "- Do NOT include the overall document title",
+      "- Do NOT include content from other sections",
+      "- Do NOT use HTML tags",
+    ].join("\n"),
   };
 
   const userMessage = {
     role: "user",
     content:
-      `${previousContext}Now write the section titled: "${currentSection}"\n\n` +
-      `This is part of notes about: "${topic}"\n\n` +
-      `Full planned outline: ${state.outline.join(", ")}`,
+      `${previousContext}Write the section titled: "${currentSection}"\n\n` +
+      `This is part of a notes document about: "${topic}"\n` +
+      `Full planned outline: ${state.outline.join(" → ")}`,
   };
 
   const response = await notesLLM.invoke([systemPrompt, userMessage]);

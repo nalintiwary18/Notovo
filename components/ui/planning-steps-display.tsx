@@ -33,19 +33,25 @@ export function PlanningStepsDisplay({
   const [open, setOpen] = useState(true)
   const [activeStep, setActiveStep] = useState<number>(-1)
 
-  // Simulate step-by-step progress while running
+  // Drive step progress while running; hold at final step until isRunning goes false
   useEffect(() => {
-    if (!isRunning) return
+    if (!isRunning) {
+      // API finished — mark everything done
+      setActiveStep(PLANNING_STEPS.length)
+      onComplete?.()
+      return
+    }
 
     setActiveStep(0)
     let current = 0
+    const LAST = PLANNING_STEPS.length - 1
 
     const interval = setInterval(() => {
       current += 1
-      if (current >= PLANNING_STEPS.length) {
+      if (current >= LAST) {
+        // Stay on last step (spinner) until isRunning goes false
+        setActiveStep(LAST)
         clearInterval(interval)
-        setActiveStep(PLANNING_STEPS.length) // all done
-        onComplete?.()
       } else {
         setActiveStep(current)
       }
