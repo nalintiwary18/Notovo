@@ -2,7 +2,7 @@
 import type React from "react"
 import { useEffect, useRef, useState } from "react"
 import ReactMarkdown from "react-markdown"
-import { Square, Paperclip, ArrowUpCircle, FileText, X, Upload, Info, ChevronRight, AlertTriangle } from "lucide-react"
+import { Square, Paperclip, ArrowUpCircle, FileText, X, Upload, ChevronRight } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useUIState } from "@/hooks/useUIState"
 import { useChatStorage } from "@/hooks/useChatStorage"
@@ -11,7 +11,8 @@ import { useAuth } from "@/hooks/AuthContext"
 import LoginPromptModal from "@/components/LoginPromptModal"
 import { classifyIntent, IntentType } from "@/lib/intentTypes"
 import Image from "next/image"
-
+import { Plus, Check } from "lucide-react"
+import { PlanningStepsDisplay } from "@/components/ui/planning-steps-display"
 interface Block {
   id: string
   type: "paragraph"
@@ -44,7 +45,9 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
   const scrollContainerRef = useRef<HTMLDivElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
-
+  const [isThinkingMode, setIsThinkingMode] = useState(false)
+  const [isPlanningMode, setIsPlanningMode] = useState(false)
+  const [showModes, setShowModes] = useState(false)
   // Auth state
   const { isAuthenticated, user } = useAuth()
 
@@ -231,10 +234,21 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
     }
   };
 
-  // Handle CHAT_ONLY intent - respond in chat only, no document changes
   const handleChatOnly = async (userMessage: { role: "user" | "assistant"; content: string }) => {
     setLoading(true)
     try {
+      if (isThinkingMode) {
+        const res = await fetch("/api/thinking", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages: [...getMessagesForAPI(messages), { role: "user", content: userMessage.content }] }),
+        })
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`)
+        const data = await res.json()
+        await addMessage({ role: "assistant", content: data.output || "Sorry, something went wrong." })
+        return
+      }
+
       const chatInstruction = {
         role: "system",
         content: "You are a helpful AI assistant. Keep your responses concise and conversational. Rules:\n" +
@@ -267,7 +281,6 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
       }
       assistantText += new TextDecoder().decode()
 
-      // Add response to chat ONLY (not document)
       await addMessage({ role: "assistant", content: assistantText })
     } catch (err) {
       console.error(err)
@@ -277,48 +290,103 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
     }
   }
 
-  // Handle DOCUMENT_CREATE intent - generate content for document
   const handleDocumentCreate = async (userMessage: { role: "user" | "assistant"; content: string }) => {
-    const systemInstruction = {
-      role: "system",
-      content:
-        "Explain concepts step by step like a teacher. Rules:\n" +
-        "- Use paragraphs for normal explanatory text.\n" +
-        "- Use h1 only for main titles or primary sections.\n" +
-        "- Use h2 for subsections.\n" +
-        "- Use h3 for minor sections or breakdowns.\n" +
-        "- Use strong only for key terms or short emphasis (never entire sentences).\n" +
-        "- Use emphasis sparingly for tone or nuance.\n" +
-        "- Use unordered or ordered lists for grouped or sequential information.\n" +
-        "- Use blockquotes only for callouts, notes, or important observations.\n" +
-        "\n" +
-        "Constraints:\n" +
-        "- Do not invent new formatting types.\n" +
-        "- Do not nest headings incorrectly.\n" +
-        "- Do not overuse emphasis or strong text.\n" +
-        "- Keep paragraphs concise and readable.\n" +
-        "- Prefer clarity and hierarchy over decoration.\n"
-    }
-
     setLoading(true)
     try {
+      if (isThinkingMode) {
+        const res = await fetch("/api/thinking", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages: [...getMessagesForAPI(messages), { role: "user", content: userMessage.content }] }),
+        })
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`)
+        const data = await res.json()
+        const assistantText = data.output || ""
+
+        if (!assistantText.trim()) {
+          await addMessage({ role: "assistant", content: "⚠️ Couldn't generate content. Please try again with a different prompt." })
+          return
+        }
+
+        const paragraphs = assistantText.split("\n\n").filter((p: string) => p.trim())
+        const newBlocks = paragraphs.map((p: string, i: number) => ({
+          id: `block-${Date.now()}-${i}`,
+          type: "paragraph" as const,
+          content: p.trim(),
+        }))
+
+        if (newBlocks.length > 0) {
+          setDocumentBlocks((prev) => [...prev, ...newBlocks])
+          setHasDocument(true)
+          await addMessage({ role: "system", content: "", showOpenDocument: true, versionIndex: totalVersions ?? 0 })
+        } else {
+          await addMessage({ role: "assistant", content: assistantText })
+        }
+        return
+      }
+
+      if (isPlanningMode) {
+        const res = await fetch("/api/planning", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages: [...getMessagesForAPI(messages), { role: "user", content: userMessage.content }] }),
+        })
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`)
+        const data = await res.json()
+        const assistantText = data.output || ""
+
+        if (!assistantText.trim()) {
+          await addMessage({ role: "assistant", content: "⚠️ Couldn't generate content. Please try again with a different prompt." })
+          return
+        }
+
+        const paragraphs = assistantText.split("\n\n").filter((p: string) => p.trim())
+        const newBlocks = paragraphs.map((p: string, i: number) => ({
+          id: `block-${Date.now()}-${i}`,
+          type: "paragraph" as const,
+          content: p.trim(),
+        }))
+
+        if (newBlocks.length > 0) {
+          setDocumentBlocks((prev) => [...prev, ...newBlocks])
+          setHasDocument(true)
+          await addMessage({ role: "system", content: "", showOpenDocument: true, versionIndex: totalVersions ?? 0 })
+        } else {
+          await addMessage({ role: "assistant", content: assistantText })
+        }
+        return
+      }
+
+      const systemInstruction = {
+        role: "system",
+        content:
+          "Explain concepts step by step like a teacher. Rules:\n" +
+          "- Use paragraphs for normal explanatory text.\n" +
+          "- Use h1 only for main titles or primary sections.\n" +
+          "- Use h2 for subsections.\n" +
+          "- Use h3 for minor sections or breakdowns.\n" +
+          "- Use strong only for key terms or short emphasis (never entire sentences).\n" +
+          "- Use emphasis sparingly for tone or nuance.\n" +
+          "- Use unordered or ordered lists for grouped or sequential information.\n" +
+          "- Use blockquotes only for callouts, notes, or important observations.\n" +
+          "\n" +
+          "Constraints:\n" +
+          "- Do not invent new formatting types.\n" +
+          "- Do not nest headings incorrectly.\n" +
+          "- Do not overuse emphasis or strong text.\n" +
+          "- Keep paragraphs concise and readable.\n" +
+          "- Prefer clarity and hierarchy over decoration.\n"
+      }
+
       let res: Response
 
       if (file) {
-        // File metadata is now passed via the userMessage in handleSend
-        // No need to track separately as it's persisted with the message
-
-        // Send with file using FormData (strip metadata from messages)
         const formData = new FormData()
         formData.append("file", file)
         formData.append("messages", JSON.stringify([...getMessagesForAPI(messages), { role: 'user', content: userMessage.content }]))
 
-        res = await fetch("/api/chat", {
-          method: "POST",
-          body: formData,
-        })
+        res = await fetch("/api/chat", { method: "POST", body: formData })
 
-        // Save uploaded file to Supabase (3hr TTL for logged-in, 1hr for guests)
         if (onSaveUploadedDocument) {
           const fileSize = file.size
           const userId = user?.id
@@ -335,7 +403,6 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
         setDocumentReady(true)
         setShowReuploadPrompt(false)
       } else {
-        // Send without file using JSON (strip metadata from messages)
         res = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -358,16 +425,11 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
       }
       assistantText += new TextDecoder().decode()
 
-      // Check if AI returned empty content
       if (!assistantText || !assistantText.trim()) {
-        await addMessage({
-          role: "assistant",
-          content: "⚠️ Couldn't generate content. Please try again with a different prompt."
-        });
-        return;
+        await addMessage({ role: "assistant", content: "⚠️ Couldn't generate content. Please try again with a different prompt." })
+        return
       }
 
-      // Add to document (not chat)
       const paragraphs = assistantText.split("\n\n").filter((p: string) => p.trim())
       const newBlocks = paragraphs.map((p: string, i: number) => ({
         id: `block-${Date.now()}-${i}`,
@@ -376,25 +438,14 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
       }))
 
       if (newBlocks.length === 0) {
-        await addMessage({
-          role: "assistant",
-          content: "⚠️ Couldn't generate content. Please try again with a different prompt."
-        });
-        return;
+        await addMessage({ role: "assistant", content: "⚠️ Couldn't generate content. Please try again with a different prompt." })
+        return
       }
 
       setDocumentBlocks((prev) => [...prev, ...newBlocks])
       setHasDocument(true)
 
-      // Notify in chat with version info
-      // Note: The version will be created by MainContent after setDocumentBlocks triggers the version creation
-      // We use totalVersions as the new version index (0-indexed, so totalVersions = next index)
-      await addMessage({
-        role: "system",
-        content: "",  // Content is replaced by custom rendering
-        showOpenDocument: true,
-        versionIndex: totalVersions ?? 0,  // This will be the new version's index
-      })
+      await addMessage({ role: "system", content: "", showOpenDocument: true, versionIndex: totalVersions ?? 0 })
     } catch (err) {
       console.error(err)
       await addMessage({ role: "assistant", content: "⚠️ Something went wrong while generating. Please try your command again." })
@@ -604,8 +655,8 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
               {/* Desktop: original greeting */}
               <div className="hidden md:block flex-wrap items-center ">
                 <Image src="/figma-assets/mascot.svg" alt="Notovo mascot" width={250}
-                       height={200}
-                       className="mb-6 pl-10" />
+                  height={200}
+                  className="mb-6 pl-10" />
                 <p className="text-2xl text-neutral-500">What are we studying today?</p>
               </div>
             </motion.div>
@@ -714,20 +765,24 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
               {/* LOADING */}
               {loading && (
                 <div className="flex justify-start">
-                  <div className="flex gap-2 py-4">
-                    <span
-                      className="w-2.5 h-2.5 bg-muted-foreground rounded-full animate-bounce"
-                      style={{ animationDelay: "0s" }}
-                    />
-                    <span
-                      className="w-2.5 h-2.5 bg-muted-foreground rounded-full animate-bounce"
-                      style={{ animationDelay: "0.2s" }}
-                    />
-                    <span
-                      className="w-2.5 h-2.5 bg-muted-foreground rounded-full animate-bounce"
-                      style={{ animationDelay: "0.4s" }}
-                    />
-                  </div>
+                  {isPlanningMode ? (
+                    <PlanningStepsDisplay isRunning={loading} />
+                  ) : (
+                    <div className="flex gap-2 py-4">
+                      <span
+                        className="w-2.5 h-2.5 bg-muted-foreground rounded-full animate-bounce"
+                        style={{ animationDelay: "0s" }}
+                      />
+                      <span
+                        className="w-2.5 h-2.5 bg-muted-foreground rounded-full animate-bounce"
+                        style={{ animationDelay: "0.2s" }}
+                      />
+                      <span
+                        className="w-2.5 h-2.5 bg-muted-foreground rounded-full animate-bounce"
+                        style={{ animationDelay: "0.4s" }}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -765,7 +820,7 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
       )}
 
       {/* INPUT BAR */}
-      <div className="w-full max-w-2xl mx-auto px-4 pb-4 self-center">
+      <div className="w-full max-w-2xl mx-auto px-4 pb-4 self-center relative">
         <AnimatePresence>
           {file && (
             <motion.div
@@ -799,7 +854,49 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
         </AnimatePresence>
 
         {/* ===== MOBILE INPUT BAR ===== */}
-        <div className="flex md:hidden items-center gap-3">
+        <div className="flex md:hidden items-center gap-2">
+          {/* Modes button */}
+          <div className="relative">
+            <button
+              onClick={() => setShowModes(!showModes)}
+              className="flex-shrink-0 w-11 h-11 rounded-full bg-neutral-800 flex items-center justify-center cursor-pointer active:scale-95 transition-transform"
+              title="More modes"
+            >
+              <Plus size={20} className="text-neutral-400" />
+            </button>
+            <AnimatePresence>
+              {showModes && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  className="absolute bottom-full mb-2 left-0 w-48 bg-neutral-800 border border-neutral-700 rounded-xl shadow-lg overflow-hidden z-20"
+                >
+                  <button
+                    onClick={() => {
+                      setIsThinkingMode(!isThinkingMode)
+                      if (!isThinkingMode) setIsPlanningMode(false)
+                      setShowModes(false)
+                    }}
+                    className="w-full text-left px-4 py-3 hover:bg-neutral-700 text-sm flex justify-between items-center text-neutral-200"
+                  >
+                    Thinking Mode {isThinkingMode && <Check size={16} className="text-primary" />}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsPlanningMode(!isPlanningMode)
+                      if (!isPlanningMode) setIsThinkingMode(false)
+                      setShowModes(false)
+                    }}
+                    className="w-full text-left px-4 py-3 hover:bg-neutral-700 text-sm flex justify-between items-center text-neutral-200 border-t border-neutral-700"
+                  >
+                    Planning Mode {isPlanningMode && <Check size={16} className="text-primary" />}
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
           {/* Add / Attach button */}
           <label
             className="flex-shrink-0 w-11 h-11 rounded-full bg-neutral-800 flex items-center justify-center cursor-pointer active:scale-95 transition-transform"
@@ -820,6 +917,34 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
               className="w-full bg-transparent text-foreground placeholder:text-neutral-500 focus:outline-none text-base"
             />
           </div>
+
+          {/* Thinking mode badge — mobile */}
+          {isThinkingMode && (
+            <AnimatePresence>
+              <motion.span
+                key="thinking-badge-mobile"
+                initial={{ opacity: 0, x: 8 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 8 }}
+                className="text-sm text-muted-foreground select-none whitespace-nowrap"
+              >
+                Thinking
+              </motion.span>
+            </AnimatePresence>
+          )}
+          {isPlanningMode && (
+            <AnimatePresence>
+              <motion.span
+                key="planning-badge-mobile"
+                initial={{ opacity: 0, x: 8 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 8 }}
+                className="text-sm text-muted-foreground select-none whitespace-nowrap"
+              >
+                Planning
+              </motion.span>
+            </AnimatePresence>
+          )}
 
           {/* Send button */}
           <button
@@ -847,30 +972,104 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
             className="w-full px-5 py-4 bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none resize-none text-base"
           />
 
-          <div className="flex items-center justify-between px-3 pb-3">
-            <label
-              className="cursor-pointer p-2 text-muted-foreground hover:text-foreground hover:bg-card rounded-lg transition-colors duration-200"
-              title="Attach file"
-            >
-              <Paperclip size={20} />
-              <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx" hidden onChange={handleFileChange} />
-            </label>
+          <div className="flex items-center justify-between px-3 pb-3 relative">
+            <div className="flex items-center gap-1">
+              {/* Modes button desktop */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowModes(!showModes)}
+                  className="cursor-pointer p-2 text-muted-foreground hover:text-foreground hover:bg-card rounded-lg transition-colors duration-200"
+                  title="Modes"
+                >
+                  <Plus size={20} />
+                </button>
+                <AnimatePresence>
+                  {showModes && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 10 }}
+                      className="absolute bottom-full mb-2 left-0 w-56 bg-card border border-border rounded-xl shadow-lg overflow-hidden z-20"
+                    >
+                      <button
+                        onClick={() => {
+                          setIsThinkingMode(!isThinkingMode)
+                          if (!isThinkingMode) setIsPlanningMode(false)
+                          setShowModes(false)
+                        }}
+                        className="w-full text-left px-4 py-3 hover:bg-muted text-sm flex justify-between items-center text-foreground"
+                      >
+                        Thinking Mode {isThinkingMode && <Check size={16} className="text-primary" />}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setIsPlanningMode(!isPlanningMode)
+                          if (!isPlanningMode) setIsThinkingMode(false)
+                          setShowModes(false)
+                        }}
+                        className="w-full text-left px-4 py-3 hover:bg-muted text-sm flex justify-between items-center text-foreground border-t border-border"
+                      >
+                        Planning Mode {isPlanningMode && <Check size={16} className="text-primary" />}
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
 
-            <button
-              onClick={handleSend}
-              disabled={(loading || isProcessing) || (!input.trim() && !file)}
-              className="p-2 rounded-lg transition-all duration-200"
-              title="Send message"
-            >
-              {(loading || isProcessing) ? (
-                <Square size={20} className="text-muted-foreground animate-pulse" />
-              ) : (
-                <ArrowUpCircle
-                  size={20}
-                  className={input.trim() || file ? "text-primary" : "text-muted-foreground cursor-not-allowed"}
-                />
+              <label
+                className="cursor-pointer p-2 text-muted-foreground hover:text-foreground hover:bg-card rounded-lg transition-colors duration-200"
+                title="Attach file"
+              >
+                <Paperclip size={20} />
+                <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx" hidden onChange={handleFileChange} />
+              </label>
+            </div>
+
+            {/* Mode badges — desktop */}
+            <div className="flex items-center gap-3">
+              {isThinkingMode && (
+                <AnimatePresence>
+                  <motion.span
+                    key="thinking-badge-desktop"
+                    initial={{ opacity: 0, x: 8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 8 }}
+                    className="text-sm text-muted-foreground select-none"
+                  >
+                    Thinking
+                  </motion.span>
+                </AnimatePresence>
               )}
-            </button>
+              {isPlanningMode && (
+                <AnimatePresence>
+                  <motion.span
+                    key="planning-badge-desktop"
+                    initial={{ opacity: 0, x: 8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 8 }}
+                    className="text-sm text-muted-foreground select-none"
+                  >
+                    Planning
+                  </motion.span>
+                </AnimatePresence>
+              )}
+
+              <button
+                onClick={handleSend}
+                disabled={(loading || isProcessing) || (!input.trim() && !file)}
+                className="p-2 rounded-lg transition-all duration-200"
+                title="Send message"
+              >
+                {(loading || isProcessing) ? (
+                  <Square size={20} className="text-muted-foreground animate-pulse" />
+                ) : (
+                  <ArrowUpCircle
+                    size={20}
+                    className={input.trim() || file ? "text-primary" : "text-muted-foreground cursor-not-allowed"}
+                  />
+                )}
+              </button>
+            </div>
           </div>
         </div>
         <p className="text-[10px] text-neutral-600 text-center py-1 select-none">

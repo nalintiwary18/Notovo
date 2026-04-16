@@ -113,47 +113,48 @@ export function SidebarDemo() {
             )}
         >
             <Sidebar open={open} setOpenAction={setOpen}>
-                <SidebarBody className="justify-between gap-4">
-                    <div className="flex flex-1 flex-col overflow-x-hidden overflow-y-clip">
+                <SidebarBody className="justify-between gap-0">
+                    {/* === TOP: Logo + New Chat (pinned, never moves) === */}
+                    <div className="flex-shrink-0 flex flex-col overflow-x-hidden">
                         {/* Logo */}
-                        <div className=" h-24">
+                        <div className="h-24">
                             <Image
                                 src="/mascot.svg"
                                 width={50}
                                 height={50}
                                 alt="Notovo Logo"
                                 onClick={() => setOpen(!open)}
-                                className="cursor-pointer "
+                                className="cursor-pointer"
                             />
                         </div>
 
-
                         {/* New Chat Button */}
-                        <div className="flex flex-col gap-2 ml-1 flex-shrink-0">
+                        <div className="flex flex-col gap-2 ml-1">
                             {links.map((link, idx) => (
                                 <SidebarLink key={idx} link={link} />
                             ))}
                         </div>
+                    </div>
 
-                        {/* Past Chats Section - Only for authenticated users */}
+                    {/* === MIDDLE: Chat History (scrollable, fills remaining space) === */}
+                    <div className="flex-1 min-h-0 overflow-hidden">
                         <AnimatePresence>
                             {isAuthenticated && chatSessions.length > 0 && (
                                 <motion.div
-                                    initial={{ opacity: 0, height: 0 }}
-                                    animate={{ opacity: 1, height: 'auto' }}
-                                    exit={{ opacity: 0, height: 0 }}
-                                    className="mt-6 flex-1 min-h-0 flex flex-col"
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    className="mt-4 h-full flex flex-col"
                                 >
                                     {open && (
-                                        <div>
-                                            <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-2 px-2">
+                                        <>
+                                            <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-2 px-2 flex-shrink-0">
                                                 Chats
                                             </p>
                                             <div
                                                 className="overflow-y-auto overflow-x-hidden flex-1 min-h-0"
                                                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                                             >
-
                                                 <div className="flex flex-col gap-1">
                                                     {chatSessions.map((session) => (
                                                         <button
@@ -180,19 +181,15 @@ export function SidebarDemo() {
                                                     ))}
                                                 </div>
                                             </div>
-                                        </div>
-
-
+                                        </>
                                     )}
-
-
                                 </motion.div>
                             )}
                         </AnimatePresence>
                     </div>
 
-                    {/* User Menu at bottom */}
-                    <div className="pt-4 border-t border-neutral-700/50">
+                    {/* === BOTTOM: User Menu (pinned) === */}
+                    <div className="flex-shrink-0 pt-4 border-t border-neutral-700/50">
                         <UserMenu collapsed={!open} />
                         <p className="text-[10px] text-neutral-600 text-center mt-2 select-none">
                             {open ? 'v0.5.1 beta' : 'β'}
