@@ -8,7 +8,7 @@ import { useUIState, SelectionData } from "@/hooks/useUIState";
 import { useDocumentStorage } from "@/hooks/useDocumentStorage";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { motion, AnimatePresence } from "framer-motion";
-import { Undo2, Redo2, ChevronLeft, Download, Maximize2, Minimize2, ChevronDown } from "lucide-react";
+import { Undo2, Redo2, ChevronLeft, Download, Maximize2, Minimize2, ChevronDown, Sun, Moon } from "lucide-react";
 import { useCallback, useRef, useState, useEffect } from "react";
 import {
     getDocumentVersions,
@@ -49,6 +49,7 @@ export default function MainContent() {
     const [isMaximized, setIsMaximized] = useState(false);
     const [showVersionDropdown, setShowVersionDropdown] = useState(false);
     const [mobileTab, setMobileTab] = useState<'chat' | 'notes'>('chat');
+    const [docTheme, setDocTheme] = useState<'dark' | 'light'>('dark');
 
     // Version history state
     const [versions, setVersions] = useState<DocumentVersion[]>([]);
@@ -368,8 +369,19 @@ export default function MainContent() {
                                         <ChevronLeft size={18} />
                                     </button>
 
-                                    {/* Center: Download + Version dropdown */}
+                                    {/* Center: Theme + Download + Version dropdown */}
                                     <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                setDocTheme(t => t === 'dark' ? 'light' : 'dark');
+                                            }}
+                                            className="p-2 rounded-lg hover:bg-gray-700/50 text-gray-400 hover:text-gray-200 transition-colors"
+                                            title={`Switch to ${docTheme === 'dark' ? 'light' : 'dark'} mode`}
+                                        >
+                                            {docTheme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+                                        </button>
                                         <button
                                             onClick={() => {
                                                 const downloadBtn = document.querySelector('[data-export-pdf]') as HTMLButtonElement;
@@ -431,6 +443,7 @@ export default function MainContent() {
                                     documentBlocks={documentBlocks as Block[]}
                                     setDocumentBlocks={handleSetDocumentBlocks}
                                     onSelectionChange={handleSelectionChange}
+                                    theme={docTheme}
                                 />
                             </div>
                         </div>
@@ -482,8 +495,19 @@ export default function MainContent() {
                                             <ChevronLeft size={18} />
                                         </button>
 
-                                        {/* Center: Download + Version dropdown */}
+                                        {/* Center: Theme + Download + Version dropdown */}
                                         <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    setDocTheme(t => t === 'dark' ? 'light' : 'dark');
+                                                }}
+                                                className="p-2 rounded-lg hover:bg-gray-700/50 text-gray-400 hover:text-gray-200 transition-colors"
+                                                title={`Switch to ${docTheme === 'dark' ? 'light' : 'dark'} mode`}
+                                            >
+                                                {docTheme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+                                            </button>
                                             <button
                                                 onClick={() => {
                                                     const downloadBtn = document.querySelector('[data-export-pdf]') as HTMLButtonElement;
@@ -544,6 +568,7 @@ export default function MainContent() {
                                         documentBlocks={documentBlocks as Block[]}
                                         setDocumentBlocks={handleSetDocumentBlocks}
                                         onSelectionChange={handleSelectionChange}
+                                        theme={docTheme}
                                     />
                                 </div>
                             </div>
@@ -585,8 +610,19 @@ export default function MainContent() {
                                                     <ChevronLeft size={18} />
                                                 </button>
 
-                                                {/* Center: Download + Version dropdown */}
+                                                {/* Center: Theme + Download + Version dropdown */}
                                                 <div className="flex items-center gap-2">
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.preventDefault();
+                                                            e.stopPropagation();
+                                                            setDocTheme(t => t === 'dark' ? 'light' : 'dark');
+                                                        }}
+                                                        className="p-2 rounded-lg hover:bg-gray-700/50 text-gray-400 hover:text-gray-200 transition-colors"
+                                                        title={`Switch to ${docTheme === 'dark' ? 'light' : 'dark'} mode`}
+                                                    >
+                                                        {docTheme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+                                                    </button>
                                                     <button
                                                         onClick={() => {
                                                             const downloadBtn = document.querySelector('[data-export-pdf]') as HTMLButtonElement;
@@ -647,6 +683,7 @@ export default function MainContent() {
                                                 documentBlocks={documentBlocks as Block[]}
                                                 setDocumentBlocks={handleSetDocumentBlocks}
                                                 onSelectionChange={handleSelectionChange}
+                                                theme={docTheme}
                                             />
                                         </div>
                                     </motion.div>

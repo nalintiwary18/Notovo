@@ -2,7 +2,7 @@
 import type React from "react"
 import { useEffect, useRef, useState } from "react"
 import ReactMarkdown from "react-markdown"
-import { Square, Paperclip, ArrowUpCircle, FileText, X, Upload, Info, ChevronRight, AlertTriangle } from "lucide-react"
+import { Square, ArrowUpCircle, FileText, X, Upload, ChevronRight, Lightbulb, Plus, ChevronDown, Paperclip } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useUIState } from "@/hooks/useUIState"
 import { useChatStorage } from "@/hooks/useChatStorage"
@@ -29,7 +29,7 @@ interface ChatSectionProps {
   onViewDocument?: () => void
 }
 
-export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploadedDocument, currentVersionIndex, totalVersions, onSwitchToVersion, onViewDocument }: ChatSectionProps) {
+export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploadedDocument, totalVersions, onSwitchToVersion, onViewDocument }: ChatSectionProps) {
   const [file, setFile] = useState<File | null>(null)
   const [processedFile, setProcessedFile] = useState<File | null>(null)
   const [showReuploadPrompt, setShowReuploadPrompt] = useState(false)
@@ -40,6 +40,12 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
   const [isDragging, setIsDragging] = useState(false)
   const [showLoginPrompt, setShowLoginPrompt] = useState(false)
   const [pendingFeature, setPendingFeature] = useState<string>('')
+  // Think Mode state
+  const [isThinkingEnabled, setIsThinkingEnabled] = useState(false)
+  const [showPlusMenu, setShowPlusMenu] = useState(false)
+  const [thinkingElapsed, setThinkingElapsed] = useState(0)
+  const thinkingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const plusMenuRef = useRef<HTMLDivElement | null>(null)
   const endRef = useRef<HTMLDivElement | null>(null)
   const scrollContainerRef = useRef<HTMLDivElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -71,15 +77,44 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
     setProcessingIntent
   } = useUIState()
   const [classifiedIntent, setClassifiedIntent] = useState<IntentType | null>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null);;
 
   useEffect(() => {
-    // Auto scroll to bottom when messages change
+    if (!input && textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
+  }, [input]);
+  useEffect(() => {
     if (endRef.current) {
       endRef.current.scrollIntoView({ behavior: "smooth", block: "end" })
     } else if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight
     }
   }, [messages])
+
+  // Close plus menu on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (plusMenuRef.current && !plusMenuRef.current.contains(e.target as Node)) {
+        setShowPlusMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  // Thinking timer: counts up while loading in think mode
+  useEffect(() => {
+    if (loading && isThinkingEnabled) {
+      setThinkingElapsed(0)
+      thinkingTimerRef.current = setInterval(() => {
+        setThinkingElapsed(s => s + 1)
+      }, 1000)
+    } else {
+      if (thinkingTimerRef.current) clearInterval(thinkingTimerRef.current)
+    }
+    return () => { if (thinkingTimerRef.current) clearInterval(thinkingTimerRef.current) }
+  }, [loading, isThinkingEnabled])
 
 
   // Helper to prepare messages for API - excludes edit commands and version notifications
@@ -179,21 +214,30 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
     try {
       const response = await fetch('/api/docrender', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          // Send the original Markdown so AI can preserve formatting
           selectedText: currentSelection.originalMarkdown,
-          command: editCommand
+          command: editCommand,
+          userId: user?.id,
+          useThinking: isThinkingEnabled,
         })
       });
 
-      if (!response.ok) {
-        throw new Error('API request failed');
+      const data = await response.json();
+
+      // ── Structured usage errors — do NOT create a version, preserve doc state
+      if (response.status === 429 || data.error === 'TOKEN_LIMIT_EXCEEDED' || data.error === 'EDIT_LIMIT_EXCEEDED') {
+        await addMessage({
+          role: "assistant",
+          content: `⚠️ ${data.message || 'Usage limit reached. Please try again later.'}`
+        });
+        return;
       }
 
-      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'API request failed');
+      }
+
       console.log('=== API Response ===');
       console.log('data:', data);
       console.log('editedText:', data.editedText);
@@ -215,12 +259,12 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
       applyEdit(data.editedText, currentSelection);
 
       // Add version button message (edit creates a new version)
-      // Note: totalVersions is the count before this edit, so it becomes the new version index
       await addMessage({
         role: "system",
         content: "",
         showOpenDocument: true,
         versionIndex: totalVersions ?? 0,
+        reasoningSummary: data.reasoningSummary || undefined,
       });
 
     } catch (err) {
@@ -235,39 +279,45 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
   const handleChatOnly = async (userMessage: { role: "user" | "assistant"; content: string }) => {
     setLoading(true)
     try {
-      const chatInstruction = {
-        role: "system",
-        content: "You are a helpful AI assistant. Keep your responses concise and conversational. Rules:\n" +
-          "- Use plain text ONLY - no markdown formatting\n" +
-          "- NO tables, code blocks, or equations\n" +
-          "- NO bullet points or numbered lists\n" +
-          "- Keep answers brief and to the point\n" +
-          "- Do NOT generate document content or notes\n" +
-          "- If user asks for document/notes generation, politely ask them to rephrase with 'generate notes' or 'create document'"
-      }
-
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: [chatInstruction, ...getMessagesForAPI(messages), { role: 'user', content: userMessage.content }] }),
+        body: JSON.stringify({
+          messages: [...getMessagesForAPI(messages), { role: 'user', content: userMessage.content }],
+          userId: user?.id,
+          useThinking: isThinkingEnabled,
+          intent: 'CHAT_ONLY'
+        }),
       })
 
-      if (!res.ok || !res.body) {
-        throw new Error(`HTTP error! status: ${res.status}`)
+      if (res.status === 429) {
+        const data = await res.json().catch(() => ({}))
+        await addMessage({ role: "assistant", content: `⚠️ ${data.message || "You've reached your usage limit. Please try again later."}` })
+        return
       }
 
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`)
+
+      if (isThinkingEnabled) {
+        const data = await res.json().catch(() => ({}))
+        await addMessage({
+          role: "assistant",
+          content: data.answer || data.error || 'Something went wrong.',
+          reasoningSummary: data.reasoning_summary || undefined,
+        })
+        return
+      }
+
+      if (!res.body) throw new Error('No response body')
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let assistantText = ""
-
       while (true) {
         const { value, done } = await reader.read()
         if (done) break
         assistantText += decoder.decode(value, { stream: true })
       }
       assistantText += new TextDecoder().decode()
-
-      // Add response to chat ONLY (not document)
       await addMessage({ role: "assistant", content: assistantText })
     } catch (err) {
       console.error(err)
@@ -277,123 +327,151 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
     }
   }
 
-  // Handle DOCUMENT_CREATE intent - generate content for document
   const handleDocumentCreate = async (userMessage: { role: "user" | "assistant"; content: string }) => {
-    const systemInstruction = {
-      role: "system",
-      content:
-        "Explain concepts step by step like a teacher. Rules:\n" +
-        "- Use paragraphs for normal explanatory text.\n" +
-        "- Use h1 only for main titles or primary sections.\n" +
-        "- Use h2 for subsections.\n" +
-        "- Use h3 for minor sections or breakdowns.\n" +
-        "- Use strong only for key terms or short emphasis (never entire sentences).\n" +
-        "- Use emphasis sparingly for tone or nuance.\n" +
-        "- Use unordered or ordered lists for grouped or sequential information.\n" +
-        "- Use blockquotes only for callouts, notes, or important observations.\n" +
-        "\n" +
-        "Constraints:\n" +
-        "- Do not invent new formatting types.\n" +
-        "- Do not nest headings incorrectly.\n" +
-        "- Do not overuse emphasis or strong text.\n" +
-        "- Keep paragraphs concise and readable.\n" +
-        "- Prefer clarity and hierarchy over decoration.\n"
-    }
-
     setLoading(true)
     try {
       let res: Response
+      let extractedText = "";
 
       if (file) {
-        // File metadata is now passed via the userMessage in handleSend
-        // No need to track separately as it's persisted with the message
-
-        // Send with file using FormData (strip metadata from messages)
+        // Step 1: Upload file to parse-file endpoint
         const formData = new FormData()
         formData.append("file", file)
-        formData.append("messages", JSON.stringify([...getMessagesForAPI(messages), { role: 'user', content: userMessage.content }]))
+        if (user?.id) formData.append("userId", user.id)
 
-        res = await fetch("/api/chat", {
+        const parseRes = await fetch("/api/parse-file", {
           method: "POST",
           body: formData,
         })
 
-        // Save uploaded file to Supabase (3hr TTL for logged-in, 1hr for guests)
+        if (parseRes.status === 429 || parseRes.status === 403) {
+          const data = await parseRes.json().catch(() => ({}))
+          await addMessage({
+            role: "assistant",
+            content: `⚠️ ${data.message || "Usage limit reached. Please try again later."}`,
+          })
+          setLoading(false)
+          return
+        }
+
+        if (!parseRes.ok) {
+          const data = await parseRes.json().catch(() => ({}))
+          throw new Error(data.error || "Failed to parse file")
+        }
+
+        const parseData = await parseRes.json()
+        extractedText = parseData.text
+
         if (onSaveUploadedDocument) {
-          const fileSize = file.size
-          const userId = user?.id
-          const reader = new FileReader()
-          reader.onload = async (e) => {
-            const content = e.target?.result as string
-            await onSaveUploadedDocument(file.name, content, file.type, fileSize, userId)
-          }
-          reader.readAsText(file)
+          await onSaveUploadedDocument(file.name, extractedText, file.type, file.size, user?.id)
         }
 
         setProcessedFile(file)
         setFile(null)
         setDocumentReady(true)
         setShowReuploadPrompt(false)
-      } else {
-        // Send without file using JSON (strip metadata from messages)
-        res = await fetch("/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messages: [systemInstruction, ...getMessagesForAPI(messages), { role: 'user', content: userMessage.content }] }),
+      }
+
+      res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [...getMessagesForAPI(messages), { role: 'user', content: userMessage.content }],
+          userId: user?.id,
+          useThinking: isThinkingEnabled,
+          intent: 'DOCUMENT_CREATE',
+          extractedText: extractedText || undefined
+        }),
+      })
+
+      // ── Structured usage errors
+      if (res.status === 429 || res.status === 403) {
+        const data = await res.json().catch(() => ({}))
+        await addMessage({
+          role: "assistant",
+          content: `⚠️ ${data.message || "You've reached your usage limit. Please try again later."}`,
         })
+        setLoading(false)
+        return
       }
 
-      if (!res.ok || !res.body) {
-        throw new Error(`HTTP error! status: ${res.status}`)
-      }
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`)
 
-      const reader = res.body.getReader()
-      const decoder = new TextDecoder()
+      // ── THINK MODE: JSON response (non-streaming)
       let assistantText = ""
+      let reasoningSummary: string | undefined
 
-      while (true) {
-        const { value, done } = await reader.read()
-        if (done) break
-        assistantText += decoder.decode(value, { stream: true })
+      if (isThinkingEnabled) {
+        const data = await res.json().catch(() => ({}))
+        assistantText = data.answer || ''
+        reasoningSummary = data.reasoning_summary || undefined
+      } else {
+        // ── NORMAL MODE: streaming (unchanged)
+        if (!res.body) throw new Error('No response body')
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        while (true) {
+          const { value, done } = await reader.read()
+          if (done) break
+          assistantText += decoder.decode(value, { stream: true })
+        }
+        assistantText += new TextDecoder().decode()
       }
-      assistantText += new TextDecoder().decode()
 
       // Check if AI returned empty content
       if (!assistantText || !assistantText.trim()) {
-        await addMessage({
-          role: "assistant",
-          content: "⚠️ Couldn't generate content. Please try again with a different prompt."
-        });
-        return;
+        await addMessage({ role: "assistant", content: "⚠️ Couldn't generate content. Please try again with a different prompt." })
+        return
       }
 
-      // Add to document (not chat)
-      const paragraphs = assistantText.split("\n\n").filter((p: string) => p.trim())
+      // Safe block splitting: Split by \n\n but do NOT split inside Markdown code blocks (```)
+      const rawChunks = assistantText.split("\n\n");
+      const paragraphs: string[] = [];
+      let currentChunk = "";
+      let inCodeBlock = false;
+
+      for (const chunk of rawChunks) {
+        const codeBlockMarkers = (chunk.match(/```/g) || []).length;
+        if (codeBlockMarkers % 2 !== 0) {
+          inCodeBlock = !inCodeBlock;
+        }
+
+        if (currentChunk) {
+          currentChunk += "\n\n" + chunk;
+        } else {
+          currentChunk = chunk;
+        }
+
+        if (!inCodeBlock) {
+          if (currentChunk.trim()) paragraphs.push(currentChunk.trim());
+          currentChunk = "";
+        }
+      }
+      
+      if (currentChunk.trim()) {
+        paragraphs.push(currentChunk.trim());
+      }
+
       const newBlocks = paragraphs.map((p: string, i: number) => ({
         id: `block-${Date.now()}-${i}`,
         type: "paragraph" as const,
-        content: p.trim(),
+        content: p,
       }))
 
       if (newBlocks.length === 0) {
-        await addMessage({
-          role: "assistant",
-          content: "⚠️ Couldn't generate content. Please try again with a different prompt."
-        });
-        return;
+        await addMessage({ role: "assistant", content: "⚠️ Couldn't generate content. Please try again with a different prompt." })
+        return
       }
 
       setDocumentBlocks((prev) => [...prev, ...newBlocks])
       setHasDocument(true)
 
-      // Notify in chat with version info
-      // Note: The version will be created by MainContent after setDocumentBlocks triggers the version creation
-      // We use totalVersions as the new version index (0-indexed, so totalVersions = next index)
       await addMessage({
         role: "system",
-        content: "",  // Content is replaced by custom rendering
+        content: "",
         showOpenDocument: true,
-        versionIndex: totalVersions ?? 0,  // This will be the new version's index
+        versionIndex: totalVersions ?? 0,
+        reasoningSummary,
       })
     } catch (err) {
       console.error(err)
@@ -450,7 +528,8 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
         userMessage.content,
         !!selection,
         !!file,
-        hasDocument || documentBlocks.length > 0
+        hasDocument || documentBlocks.length > 0,
+        user?.id
       )
 
       setClassifiedIntent(classification.intent)
@@ -548,12 +627,47 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
     }
   }
 
-  // Truncate text for selection preview
   const truncateText = (text: string, maxLength = 100) => {
     if (text.length <= maxLength) return text
     return text.substring(0, maxLength) + "..."
   }
   const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User'
+
+  // ── ReasoningBubble: collapsible Think Mode summary ───────────────────────
+  function ReasoningBubble({ summary }: { summary: string }) {
+    const [open, setOpen] = useState(false)
+    return (
+      <div className="mb-1.5">
+        <button
+          type="button"
+          onClick={() => setOpen(v => !v)}
+          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors select-none"
+        >
+          <Lightbulb size={11} className="text-indigo-400" />
+          <span>Thought for a moment</span>
+          <ChevronDown
+            size={11}
+            className={`transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+          />
+        </button>
+        <AnimatePresence>
+          {open && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden"
+            >
+              <p className="mt-1.5 text-xs text-muted-foreground/80 leading-relaxed pl-3 border-l border-indigo-400/30 italic">
+                {summary}
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    )
+  }
 
 
 
@@ -658,6 +772,11 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
                           </div>
                         )}
 
+                        {/* Reasoning Summary Bubble (Think Mode) */}
+                        {!isUser && !isSystem && m.reasoningSummary && (
+                          <ReasoningBubble summary={m.reasoningSummary} />
+                        )}
+
                         {/* Message Content */}
                         <div
                           className={`${isUser
@@ -714,20 +833,22 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
               {/* LOADING */}
               {loading && (
                 <div className="flex justify-start">
-                  <div className="flex gap-2 py-4">
-                    <span
-                      className="w-2.5 h-2.5 bg-muted-foreground rounded-full animate-bounce"
-                      style={{ animationDelay: "0s" }}
-                    />
-                    <span
-                      className="w-2.5 h-2.5 bg-muted-foreground rounded-full animate-bounce"
-                      style={{ animationDelay: "0.2s" }}
-                    />
-                    <span
-                      className="w-2.5 h-2.5 bg-muted-foreground rounded-full animate-bounce"
-                      style={{ animationDelay: "0.4s" }}
-                    />
-                  </div>
+                  {isThinkingEnabled ? (
+                    // Think Mode indicator
+                    <div className="flex items-center gap-2 py-3 px-1">
+                      <Lightbulb size={14} className="text-indigo-400 animate-pulse" />
+                      <span className="text-sm text-muted-foreground">
+                        Thinking{thinkingElapsed > 0 ? ` for ${thinkingElapsed}s` : '...'}
+                      </span>
+                    </div>
+                  ) : (
+                    // Normal bounce dots (unchanged)
+                    <div className="flex gap-2 py-4">
+                      <span className="w-2.5 h-2.5 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: "0s" }} />
+                      <span className="w-2.5 h-2.5 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: "0.2s" }} />
+                      <span className="w-2.5 h-2.5 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: "0.4s" }} />
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -799,63 +920,186 @@ export default function Chat({ setDocumentBlocks, documentBlocks, onSaveUploaded
         </AnimatePresence>
 
         {/* ===== MOBILE INPUT BAR ===== */}
-        <div className="flex md:hidden items-center gap-3">
-          {/* Add / Attach button */}
-          <label
-            className="flex-shrink-0 w-11 h-11 rounded-full bg-neutral-800 flex items-center justify-center cursor-pointer active:scale-95 transition-transform"
-            title="Attach file"
-          >
-            <img src="/add_icon.svg" alt="Attach" className="w-6 h-6" />
+        <div className="flex md:hidden items-end gap-3">
+          <div className="relative" ref={plusMenuRef}>
+            <button
+                type="button"
+                onClick={() => setShowPlusMenu(v => !v)}
+                className={`flex-shrink-0 flex items-center gap-1 px-2.5 h-11 w-11 rounded-full justify-center transition-all ${
+                    isThinkingEnabled
+                        ? 'bg-indigo-500/20 text-indigo-400'
+                        : 'bg-neutral-800 text-neutral-500'
+                }`}
+                title="Options"
+            >
+              {isThinkingEnabled ? (
+                  <Lightbulb size={18} />
+              ) : (
+                  <img src="/add_icon.svg" alt="Options" className="w-6 h-6" />
+              )}
+            </button>
+
+            {/* Hidden file input */}
             <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx" hidden onChange={handleFileChange} />
-          </label>
+
+            {/* Popover menu — opens upward, same as desktop */}
+            <AnimatePresence>
+              {showPlusMenu && (
+                  <motion.div
+                      initial={{ opacity: 0, y: 6, scale: 0.96 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 6, scale: 0.96 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute bottom-full mb-2 left-0 w-44 bg-card border border-border rounded-xl shadow-xl overflow-hidden z-30"
+                  >
+                    <button
+                        type="button"
+                        onClick={() => { fileInputRef.current?.click(); setShowPlusMenu(false); }}
+                        className="w-full flex items-center gap-3 px-4 py-3 text-sm text-foreground hover:bg-muted transition-colors"
+                    >
+                      <Paperclip size={15} className="text-muted-foreground" />
+                      Add file
+                    </button>
+                    <div className="h-px bg-border" />
+                    <button
+                        type="button"
+                        onClick={() => { setIsThinkingEnabled(v => !v); setShowPlusMenu(false); }}
+                        className={`w-full flex items-center gap-3 px-4 py-3 text-sm transition-colors ${
+                            isThinkingEnabled
+                                ? 'text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/15'
+                                : 'text-foreground hover:bg-muted'
+                        }`}
+                    >
+                      <Lightbulb size={15} className={isThinkingEnabled ? 'text-indigo-400' : 'text-muted-foreground'} />
+                      Thinking
+                      {isThinkingEnabled && (
+                          <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide text-indigo-400">On</span>
+                      )}
+                    </button>
+                  </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
 
           {/* Text input */}
-          <div className="flex-1 bg-neutral-800 rounded-full px-5 py-3">
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={selection ? "Edit selected text..." : "Ask notovo"}
-              className="w-full bg-transparent text-foreground placeholder:text-neutral-500 focus:outline-none text-base"
+          <div className="flex-1 bg-neutral-800 rounded-3xl px-5 py-3">
+            {isThinkingEnabled && (
+                <span className="flex items-center gap-1 mb-2 w-fit px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-500/20 text-indigo-400 border border-indigo-400/40">
+      <Lightbulb size={10} />
+      Think
+    </span>
+            )}
+            <textarea
+                ref={textareaRef}
+                rows={1}
+                value={input}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  e.target.style.height = 'auto';
+                  e.target.style.height = `${e.target.scrollHeight}px`;
+                }}
+                onKeyDown={handleKeyDown}
+                placeholder={selection ? "Edit selected text..." : "Ask notovo"}
+                className="w-full bg-transparent text-foreground placeholder:text-neutral-500 focus:outline-none text-base resize-none scrollbar-hide overflow-hidden max-h-40 leading-6"
+                style={{ maxHeight: '160px', overflowY: 'auto' }}
             />
           </div>
 
           {/* Send button */}
           <button
-            onClick={handleSend}
-            disabled={(loading || isProcessing) || (!input.trim() && !file)}
-            className="flex-shrink-0 w-11 h-11 rounded-full bg-neutral-800 flex items-center justify-center active:scale-95 transition-transform disabled:opacity-40"
-            title="Send message"
+              onClick={handleSend}
+              disabled={(loading || isProcessing) || (!input.trim() && !file)}
+              className="flex-shrink-0 w-11 h-11 rounded-full bg-neutral-800 flex items-center justify-center active:scale-95 transition-transform disabled:opacity-40"
+              title="Send message"
           >
             {(loading || isProcessing) ? (
-              <Square size={18} className="text-neutral-500 animate-pulse" />
+                <Square size={18} className="text-neutral-500 animate-pulse" />
             ) : (
-              <img src="/send_icon.svg" alt="Send" className="w-6 h-6" />
+                <img src="/send_icon.svg" alt="Send" className="w-6 h-6" />
             )}
           </button>
         </div>
 
-        {/* ===== DESKTOP INPUT BAR (unchanged) ===== */}
-        <div className="hidden md:block bg-muted rounded-2xl p-1 border border-border transition-all duration-200 hover:border-border/80 focus-within:border-primary/50">
+        {/* ===== DESKTOP INPUT BAR ===== */}
+        <div className="hidden md:block bg-muted rounded-2xl p-1 border border-border transition-all duration-200 hover:border-border/80">
           <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            rows={1}
-            placeholder={selection ? "Edit selected text..." : "Ask Notovo..."}
-            className="w-full px-5 py-4 bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none resize-none text-base"
+              value={input}
+              onChange={(e) => {
+                setInput(e.target.value);
+                e.target.style.height = "auto";
+                e.target.style.height = `${e.target.scrollHeight}px`;
+              }}
+              onKeyDown={handleKeyDown}
+              rows={1}
+              placeholder={selection ? "Edit selected text..." : "Ask Notovo..."}
+              className="w-full px-5 py-4 bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none resize-none text-base overflow-y-scroll max-h-52 scrollbar-hide"
           />
 
           <div className="flex items-center justify-between px-3 pb-3">
-            <label
-              className="cursor-pointer p-2 text-muted-foreground hover:text-foreground hover:bg-card rounded-lg transition-colors duration-200"
-              title="Attach file"
-            >
-              <Paperclip size={20} />
-              <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx" hidden onChange={handleFileChange} />
-            </label>
+            {/* Left: + button with popover */}
+            <div className="relative" ref={plusMenuRef}>
+              <button
+                type="button"
+                onClick={() => setShowPlusMenu(v => !v)}
+                className={`flex items-center gap-1.5 p-2 rounded-lg transition-colors duration-200 ${
+                  isThinkingEnabled
+                    ? 'text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-card'
+                }`}
+                title="Options"
+              >
+                <Plus size={18} />
+                {isThinkingEnabled && (
+                  <span className="flex items-center gap-1 text-xs font-medium">
+                    <Lightbulb size={11} />
+                    Think
+                  </span>
+                )}
+              </button>
 
+              {/* Hidden file input */}
+              <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx" hidden onChange={handleFileChange} />
+
+              {/* Popover menu */}
+              <AnimatePresence>
+                {showPlusMenu && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 6, scale: 0.96 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 6, scale: 0.96 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute bottom-full mb-2 left-0 w-44 bg-card border border-border rounded-xl shadow-xl overflow-hidden z-30"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => { fileInputRef.current?.click(); setShowPlusMenu(false) }}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm text-foreground hover:bg-muted transition-colors"
+                    >
+                      <Paperclip size={15} className="text-muted-foreground" />
+                      Add file
+                    </button>
+                    <div className="h-px bg-border" />
+                    <button
+                      type="button"
+                      onClick={() => { setIsThinkingEnabled(v => !v); setShowPlusMenu(false) }}
+                      className={`w-full flex items-center gap-3 px-4 py-3 text-sm transition-colors ${
+                        isThinkingEnabled
+                          ? 'text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/15'
+                          : 'text-foreground hover:bg-muted'
+                      }`}
+                    >
+                      <Lightbulb size={15} className={isThinkingEnabled ? 'text-indigo-400' : 'text-muted-foreground'} />
+                      Thinking
+                      {isThinkingEnabled && (
+                        <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide text-indigo-400">On</span>
+                      )}
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Right: send button */}
             <button
               onClick={handleSend}
               disabled={(loading || isProcessing) || (!input.trim() && !file)}

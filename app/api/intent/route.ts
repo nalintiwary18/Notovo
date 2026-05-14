@@ -1,26 +1,43 @@
 import { ChatGroq } from "@langchain/groq";
 import { NextResponse } from "next/server";
+import {
+    checkTokenLimit,
+    incrementTokenUsage,
+    estimateTokens,
+} from "@/lib/usage";
 
 const llm = new ChatGroq({
     apiKey: process.env.GROQ_API_KEY,
-    model: "openai/gpt-oss-120b",
+    model: "openai/gpt-oss-20b",
     temperature: 0.1,  // Low temp for classification
 });
 
 interface IntentRequest {
     message: string;
     hasDocument: boolean;
+    userId?: string;
 }
 
 export async function POST(request: Request) {
     try {
-        const { message, hasDocument }: IntentRequest = await request.json();
+        const { message, hasDocument, userId }: IntentRequest = await request.json();
 
         if (!message) {
             return NextResponse.json(
                 { error: "Missing message" },
                 { status: 400 }
             );
+        }
+
+        // ── TOKEN LIMIT CHECK ─────────────────────────────────────────────────
+        if (userId) {
+            const tokenCheck = await checkTokenLimit(userId);
+            if (!tokenCheck.allowed) {
+                return NextResponse.json(
+                    { error: tokenCheck.code, message: tokenCheck.message, usage: tokenCheck.usage },
+                    { status: 429 }
+                );
+            }
         }
 
         const prompt = `You are an intent classifier for Notovo AI — an intelligent writing engine built into the Notovo platform. Classify the user's message into one of three intents:
@@ -54,6 +71,12 @@ Respond in JSON format only:
         const content = typeof response.content === 'string'
             ? response.content.trim()
             : '';
+
+        // ── TOKEN TRACKING (fire-and-forget) ──────────────────────────────────
+        if (userId) {
+            const tokens = estimateTokens(prompt) + estimateTokens(content);
+            incrementTokenUsage(userId, tokens).catch(console.error);
+        }
 
         // Parse the JSON response
         try {

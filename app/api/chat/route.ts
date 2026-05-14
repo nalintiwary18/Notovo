@@ -1,14 +1,23 @@
 
 import { ChatGroq } from "@langchain/groq";
 import { NextResponse } from "next/server";
-import mammoth from "mammoth";
 import { BaseMessage } from "@langchain/core/messages";
-const pdfParse = require('pdf-parse-fork');
+import {
+  checkTokenLimit,
+  incrementTokenUsage,
+  estimateTokens,
+} from "@/lib/usage";
 
-const llm = new ChatGroq({
+const generationLlm = new ChatGroq({
   apiKey: process.env.GROQ_API_KEY,
   model: "openai/gpt-oss-120b",
   temperature: 0.7,
+});
+
+const thinkingLlm = new ChatGroq({
+  apiKey: process.env.GROQ_API_KEY,
+  model: "openai/gpt-oss-20b",
+  temperature: 0.8,
 });
 
 
@@ -24,46 +33,7 @@ interface ContentBlock {
   text?: string;
 }
 
-// PDF parsing with retry for first-time initialization
-async function parsePdfWithRetry(buffer: Buffer, maxRetries = 2): Promise<string> {
-  let lastError: Error | null = null;
 
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      const data = await pdfParse(buffer);
-
-      if (!data.text) {
-        throw new Error("PDF contains no extractable text.");
-      }
-      return data.text;
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
-      console.error(`PDF Parsing attempt ${attempt}/${maxRetries} failed:`, error);
-
-      // Small delay before retry to allow initialization to complete
-      if (attempt < maxRetries) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-    }
-  }
-
-  throw new Error(`Failed to parse PDF file after ${maxRetries} attempts: ${lastError?.message}`);
-}
-
-async function extractText(file: File, buffer: Buffer) {
-  const fileName = file.name.toLowerCase();
-
-  if (fileName.endsWith(".pdf")) {
-    return await parsePdfWithRetry(buffer);
-  }
-
-  if (fileName.endsWith(".docx")) {
-    const result = await mammoth.extractRawText({ buffer });
-    return result.value;
-  }
-
-  throw new Error("Unsupported file type");
-}
 
 export async function POST(req: Request) {
   const contentType = req.headers.get("content-type") || "";
@@ -71,98 +41,39 @@ export async function POST(req: Request) {
 
   let messages: ChatMessage[];
   let extractedText = "";
+  let userId: string | undefined;
+  let useThinking = false;
+  let intent = "CHAT_ONLY";
 
-  if (contentType.includes("multipart/form-data")) {
-    // Handle file upload with chat
-    const formData = await req.formData();
-    const file = formData.get("file") as File | null;
+  if (!contentType.includes("application/json")) {
+    return new Response("Bad Request: Content-Type must be application/json", { status: 400 });
+  }
 
-    if (!file) {
-      console.log("No file found in formData");
-      return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
+  try {
+    const body = await req.json();
+    messages = body.messages;
+    userId = body.userId;
+    useThinking = body.useThinking === true;
+    intent = body.intent || "CHAT_ONLY";
+    extractedText = body.extractedText || "";
+
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return new Response("Bad Request: messages array required", { status: 400 });
     }
+  } catch (e) {
+    console.log("JSON parsing error:", e);
+    return new Response("Bad Request: Invalid JSON", { status: 400 });
+  }
 
-    let buffer: Buffer;
-    try {
-      buffer = Buffer.from(await file.arrayBuffer());
-    } catch (e) {
-      console.log("Failed to read file:", e);
-      return NextResponse.json({ error: "Failed to read uploaded file" }, { status: 400 });
+  // ── TOKEN LIMIT CHECK ─────────────────────────────────────────────────────
+  if (userId) {
+    const tokenCheck = await checkTokenLimit(userId);
+    if (!tokenCheck.allowed) {
+      return NextResponse.json(
+        { error: tokenCheck.code, message: tokenCheck.message, usage: tokenCheck.usage },
+        { status: 429 }
+      );
     }
-
-    // Parse messages from form data
-    const rawMessages = formData.get("messages");
-    console.log("Raw messages from form data:", rawMessages);
-
-    if (typeof rawMessages !== "string") {
-      console.log("Messages field is not a string:", typeof rawMessages);
-      return new Response("Bad Request: messages field (JSON string) required", { status: 400 });
-    }
-
-    try {
-      const parsed: unknown = JSON.parse(rawMessages);
-      console.log("Parsed messages:", parsed);
-
-      if (!Array.isArray(parsed)) {
-        console.log("Parsed messages is not an array:", typeof parsed);
-        return new Response("Bad Request: messages must be an array", { status: 400 });
-      }
-
-      messages = parsed
-        .map((m: unknown) => {
-          if (
-            typeof m === "object" &&
-            m !== null &&
-            "role" in m &&
-            "content" in m &&
-            typeof (m as { role: unknown }).role === "string" &&
-            typeof (m as { content: unknown }).content === "string"
-          ) {
-            return m as ChatMessage;
-          }
-          return null;
-        })
-        .filter((m: ChatMessage | null): m is ChatMessage => m !== null);
-
-      console.log("Filtered messages:", messages);
-
-      if (messages.length === 0) {
-        console.log("No valid messages found");
-        return new Response("Bad Request: messages array is empty or invalid", { status: 400 });
-      }
-    } catch (e) {
-      console.log("JSON parse error:", e);
-      return new Response("Bad Request: messages must be valid JSON", { status: 400 });
-    }
-
-    // Extract text from the uploaded document
-    try {
-      extractedText = await extractText(file, buffer);
-      console.log("Extracted text length:", extractedText.length);
-    } catch (e: unknown) {
-      console.log("Text extraction error:", e);
-      const message = typeof e === "object" && e !== null && "message" in e ? String((e as { message?: unknown }).message) : "Unsupported or unreadable file";
-      return NextResponse.json({ error: message }, { status: 400 });
-    }
-
-  } else if (contentType.includes("application/json")) {
-    // Handle regular chat without file
-    try {
-      const body = await req.json();
-      console.log("JSON body:", body);
-      messages = body.messages;
-
-      if (!Array.isArray(messages) || messages.length === 0) {
-        console.log("Invalid messages array:", messages);
-        return new Response("Bad Request: messages array required", { status: 400 });
-      }
-    } catch (e) {
-      console.log("JSON parsing error:", e);
-      return new Response("Bad Request: Invalid JSON", { status: 400 });
-    }
-  } else {
-    console.log("Unsupported content type:", contentType);
-    return new Response("Bad Request: Content-Type must be application/json or multipart/form-data", { status: 400 });
   }
 
   console.log("Final messages count:", messages.length);
@@ -190,6 +101,7 @@ Capabilities:
 Identity Rules:
 - Your name is "Notovo AI".
 - You were built by the Notovo team.
+- You were made in 2026 January and was released in 2026 March.
 - Do NOT say you are ChatGPT, Claude, or any other AI product.
 - Do NOT say you were created by OpenAI, Anthropic, Google, or any other provider.
 - Do NOT mention underlying model providers unless explicitly asked.
@@ -206,22 +118,137 @@ Behavior Rules:
 
 Tone: Clear. Focused. Premium. Minimal fluff.`;
 
+  const CHAT_INSTRUCTION = `You are a helpful AI assistant. Keep your responses concise and conversational. Rules:
+- Use plain text ONLY - no markdown formatting
+- NO tables, code blocks, or equations
+- NO bullet points or numbered lists
+- Keep answers brief and to the point
+- Do NOT generate document content or notes
+- If user asks for document/notes generation, politely ask them to rephrase with 'generate notes' or 'create document'`;
+
+  const DOCUMENT_INSTRUCTION = `Explain concepts step by step like a teacher. Rules:
+- Use paragraphs for normal explanatory text.
+- Use h1 only for main titles or primary sections.
+- Use h2 for subsections.
+- Use h3 for minor sections or breakdowns.
+- Use strong only for key terms or short emphasis (never entire sentences).
+- Use emphasis sparingly for tone or nuance.
+- Use unordered or ordered lists for grouped or sequential information.
+- Use blockquotes only for callouts, notes, or important observations.
+
+Constraints:
+- Do not invent new formatting types.
+- Do not nest headings incorrectly.
+- Do not overuse emphasis or strong text.
+- Keep paragraphs concise and readable.
+- Prefer clarity and hierarchy over decoration.`;
+
+  let baseSystemPrompt = NOTOVO_AI_SYSTEM_PROMPT;
+  if (intent === 'CHAT_ONLY') {
+    baseSystemPrompt += "\n\n" + CHAT_INSTRUCTION;
+  } else if (intent === 'DOCUMENT_CREATE') {
+    baseSystemPrompt += "\n\n" + DOCUMENT_INSTRUCTION;
+  }
+
   const systemContent = extractedText
-    ? `${NOTOVO_AI_SYSTEM_PROMPT}\n\nThe user has provided the following document. Use it to answer questions and generate content. Format information clearly without markdown table separators.\n\n---\n${extractedText.slice(0, 15000)}`
-    : NOTOVO_AI_SYSTEM_PROMPT;
+    ? `${baseSystemPrompt}\n\nThe user has provided the following document. Use it to answer questions and generate content. Format information clearly without markdown table separators.\n\n---\n${extractedText.slice(0, 15000)}`
+    : baseSystemPrompt;
 
   const messagesWithContext: ChatMessage[] = [
     { role: "system", content: systemContent },
     ...messages,
   ];
 
+  // Estimate input tokens for tracking
+  const inputText = messagesWithContext.map(m => m.content).join(' ');
+  const inputTokens = estimateTokens(inputText);
+
+  // ── THINK MODE: Multi-Step Agentic Workflow (non-streaming, returns JSON) ─
+  if (useThinking) {
+    try {
+      // Step 1: Draft & Think
+      const step1Messages = [
+        ...messagesWithContext,
+        { role: "system", content: "Step 1 (Draft & Think): Analyze the user's request, list any constraints, list all the topics and subtopics or possible subtopics to be included in the response mentioned in the user's prompt, and write a new detailed prompt for generation of the final response. Focus on brainstorming and thoroughness. Do not output final formatting yet." }
+      ];
+      const draftResponse = await thinkingLlm.invoke(step1Messages as unknown as BaseMessage[]);
+      const draftText = typeof draftResponse.content === 'string' ? draftResponse.content.trim() : '';
+
+      // Step 2: Critique
+      const step2Messages = [
+        ...step1Messages,
+        { role: "assistant", content: draftText },
+        { role: "system", content: "Step 2 (Critique): Review your draft above. Identify any missing Topics or subtopics, logical errors or formatting that doesn't follow the system guidelines. Provide a concise critique." }
+      ];
+      const critiqueResponse = await thinkingLlm.invoke(step2Messages as unknown as BaseMessage[]);
+      const critiqueText = typeof critiqueResponse.content === 'string' ? critiqueResponse.content.trim() : '';
+
+      // Step 3: Final Output
+      const step3Messages = [
+        ...step2Messages,
+        { role: "assistant", content: critiqueText },
+        { role: "system", content: `Step 3 (Final Output): Based on your draft and critique, write the final, 
+          polished response with detailed explanation in long paragraphs with Important information of the above topics and subtopics, be confident, not apologetic and be insightful like a professor with multiple years of experience explaining the topic to a student.` }
+      ];
+      const finalResponse = await generationLlm.invoke(step3Messages as unknown as BaseMessage[]);
+      const rawText = typeof finalResponse.content === 'string' ? finalResponse.content.trim() : '';
+
+      // Parse XML tags — failsafe: if tags missing, treat entire output as answer
+      const summaryMatch = rawText.match(/<reasoning_summary>([\/\s\S]*?)<\/reasoning_summary>/);
+      const answerMatch  = rawText.match(/<answer>([\s\S]*?)<\/answer>/);
+
+      let reasoning_summary = '';
+      if (summaryMatch) {
+        reasoning_summary = summaryMatch[1].trim().split(/(?<=[.!?])\s+/).slice(0, 3).join(' ');
+      }
+
+      let answer = rawText;
+      if (answerMatch) {
+        answer = answerMatch[1].trim();
+      } else if (summaryMatch) {
+        // Fallback: If it missed the </answer> tag due to token truncation
+        const answerStart = rawText.indexOf('<answer>');
+        if (answerStart !== -1) {
+          answer = rawText.substring(answerStart + 8).trim();
+        } else {
+          const summaryEnd = rawText.indexOf('</reasoning_summary>');
+          if (summaryEnd !== -1) {
+            answer = rawText.substring(summaryEnd + 20).trim();
+          }
+        }
+      }
+
+      // Token tracking (fire-and-forget) - True API Cost calculation for premium feature
+      if (userId) {
+        const step1InputTokens = estimateTokens(step1Messages.map(m => m.content).join(' '));
+        const step2InputTokens = estimateTokens(step2Messages.map(m => m.content).join(' '));
+        const step3InputTokens = estimateTokens(step3Messages.map(m => m.content).join(' '));
+        
+        const step1OutputTokens = estimateTokens(draftText);
+        const step2OutputTokens = estimateTokens(critiqueText);
+        const step3OutputTokens = estimateTokens(rawText);
+
+        const totalTokens = step1InputTokens + step2InputTokens + step3InputTokens + 
+                            step1OutputTokens + step2OutputTokens + step3OutputTokens;
+                            
+        incrementTokenUsage(userId, totalTokens).catch(console.error);
+      }
+
+      return NextResponse.json({ reasoning_summary, answer });
+    } catch (e) {
+      console.error('Think Mode invoke error:', e);
+      return NextResponse.json({ error: 'Think Mode failed' }, { status: 500 });
+    }
+  }
+
   try {
     const encoder = new TextEncoder();
+    let totalOutputChars = 0;
 
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
         try {
-          for await (const chunk of await llm.stream(messagesWithContext as unknown as BaseMessage[])) {
+          for await (const chunk of await generationLlm.stream(messagesWithContext as unknown as BaseMessage[])) {
             const streamChunk = chunk as StreamChunk;
             const content =
               typeof streamChunk.content === "string"
@@ -234,6 +261,7 @@ Tone: Clear. Focused. Premium. Minimal fluff.`;
                   .join("");
 
             if (content) {
+              totalOutputChars += content.length;
               controller.enqueue(encoder.encode(content));
             }
           }
@@ -242,6 +270,14 @@ Tone: Clear. Focused. Premium. Minimal fluff.`;
           controller.error(err);
         } finally {
           controller.close();
+
+          // ── ASYNC TOKEN TRACKING (after stream completes) ─────────────────
+          if (userId) {
+            const outputTokens = Math.ceil(totalOutputChars / 4);
+            const totalTokens = inputTokens + outputTokens;
+            // Fire-and-forget — do not await
+            incrementTokenUsage(userId, totalTokens).catch(console.error);
+          }
         }
       },
     });
@@ -252,7 +288,6 @@ Tone: Clear. Focused. Premium. Minimal fluff.`;
         "Cache-Control": "no-cache, no-transform",
         "Connection": "keep-alive",
         "X-Accel-Buffering": "no",
-
       },
     });
   } catch (e) {

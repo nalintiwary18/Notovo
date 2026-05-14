@@ -86,13 +86,14 @@ export function quickClassify(
  */
 export async function classifyIntentWithAI(
     message: string,
-    hasDocument: boolean
+    hasDocument: boolean,
+    userId?: string
 ): Promise<IntentClassification> {
     try {
         const response = await fetch('/api/intent', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message, hasDocument })
+            body: JSON.stringify({ message, hasDocument, userId })
         });
 
         if (!response.ok) {
@@ -119,7 +120,8 @@ export async function classifyIntent(
     message: string,
     hasSelection: boolean,
     hasFile: boolean,
-    hasDocument: boolean
+    hasDocument: boolean,
+    userId?: string
 ): Promise<IntentClassification> {
     // Try quick local classification first
     const quickResult = quickClassify(message, hasSelection, hasFile);
@@ -135,5 +137,5 @@ export async function classifyIntent(
     }
 
     // Use AI for ambiguous cases
-    return classifyIntentWithAI(message, hasDocument);
+    return classifyIntentWithAI(message, hasDocument, userId);
 }

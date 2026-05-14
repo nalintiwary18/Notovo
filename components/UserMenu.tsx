@@ -2,8 +2,9 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LogOut, Settings, User, ChevronRight } from 'lucide-react'
+import { LogOut, User, Zap } from 'lucide-react'
 import { useAuth } from '@/hooks/AuthContext'
+import { useUsage } from '@/hooks/useUsage'
 import { useRouter } from 'next/navigation'
 import { getAvatarGradient } from "@/components/ui/avatar";
 import Image from 'next/image'
@@ -16,6 +17,7 @@ export default function UserMenu({ collapsed = false }: UserMenuProps) {
     const [isOpen, setIsOpen] = useState(false)
     const menuRef = useRef<HTMLDivElement>(null)
     const { user, logout, isAuthenticated, loading } = useAuth()
+    const { summary: usageSummary } = useUsage()
     const router = useRouter()
 
     // Close menu when clicking outside
@@ -135,6 +137,46 @@ export default function UserMenu({ collapsed = false }: UserMenuProps) {
                                 </div>
                             </div>
                         </div>
+
+                        {/* ── Credits / Usage Display ── */}
+                        {usageSummary !== null && (
+                            <div className="px-4 py-3 border-b border-neutral-700/50">
+                                <div className="flex items-center justify-between mb-1.5">
+                                    <div className="flex items-center gap-1.5 text-xs text-neutral-400">
+                                        <Zap className="h-3 w-3 text-yellow-400" />
+                                        <span>Credits remaining</span>
+                                    </div>
+                                    <span className="text-xs font-semibold text-white">
+                                        {usageSummary.credits} / {usageSummary.maxCredits}
+                                    </span>
+                                </div>
+                                {/* Progress bar: fraction of total credits remaining */}
+                                <div className="h-1.5 w-full bg-neutral-700 rounded-full overflow-hidden">
+                                    <motion.div
+                                        initial={{ width: 0 }}
+                                        animate={{
+                                            width: `${usageSummary.maxCredits > 0
+                                                ? Math.min(100, (usageSummary.credits / usageSummary.maxCredits) * 100)
+                                                : 0}%`
+                                        }}
+                                        transition={{ duration: 0.6, ease: 'easeOut' }}
+                                        className={`h-full rounded-full ${
+                                            usageSummary.credits > usageSummary.maxCredits * 0.2
+                                                ? 'bg-gradient-to-r from-purple-500 to-indigo-500'
+                                                : 'bg-gradient-to-r from-orange-500 to-red-500'
+                                        }`}
+                                    />
+                                </div>
+                                <div className="flex items-center justify-between mt-1.5">
+                                    <span className="text-xs text-neutral-500 capitalize">
+                                        {usageSummary.plan} plan
+                                    </span>
+                                    <span className="text-xs text-neutral-500">
+                                        {usageSummary.editsRemaining} / {usageSummary.editsLimit} AI edits today
+                                    </span>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Menu Items */}
                         <div className="p-2">

@@ -27,7 +27,20 @@ const pangolin = Pangolin({
 });
 
 export const metadata: Metadata = {
-  title: "Notovo"
+  title: "Notovo",
+  description: "From Raw Material to Structured Notes",
+  icons: {
+    icon: [
+      { url: "/favicon/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+      { url: "/favicon/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon/favicon.ico", type: "image/x-icon" },
+    ],
+    apple: [{ url: "/favicon/apple-touch-icon.png", sizes: "180x180" }],
+    shortcut: [
+      { url: "/favicon/favicon.ico" }
+    ],
+  },
+  manifest: "/favicon/site.webmanifest",
 };
 
 export default function RootLayout({

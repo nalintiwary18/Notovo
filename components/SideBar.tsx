@@ -113,8 +113,8 @@ export function SidebarDemo() {
             )}
         >
             <Sidebar open={open} setOpenAction={setOpen}>
-                <SidebarBody className="justify-between gap-4">
-                    <div className="flex flex-1 flex-col overflow-x-hidden overflow-y-clip">
+                <SidebarBody className="justify-between gap-4 min-h-0">
+                    <div className="flex flex-1 min-h-0 flex-col overflow-x-hidden overflow-hidden">
                         {/* Logo */}
                         <div className=" h-24">
                             <Image
@@ -145,13 +145,12 @@ export function SidebarDemo() {
                                     className="mt-6 flex-1 min-h-0 flex flex-col"
                                 >
                                     {open && (
-                                        <div>
-                                            <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-2 px-2">
+                                        <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                                            <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-2 px-2 shrink-0">
                                                 Chats
                                             </p>
                                             <div
-                                                className="overflow-y-auto overflow-x-hidden flex-1 min-h-0"
-                                                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                                                className="overflow-y-auto overflow-x-hidden flex-1 min-h-0 pr-2 scrollbar-hide"
                                             >
 
                                                 <div className="flex flex-col gap-1">
@@ -195,7 +194,7 @@ export function SidebarDemo() {
                     <div className="pt-4 border-t border-neutral-700/50">
                         <UserMenu collapsed={!open} />
                         <p className="text-[10px] text-neutral-600 text-center mt-2 select-none">
-                            {open ? 'v0.5.1 beta' : 'β'}
+                            {open ? 'v0.6.1 beta' : 'β'}
                         </p>
                     </div>
                 </SidebarBody>

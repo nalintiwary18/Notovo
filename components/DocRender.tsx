@@ -3,7 +3,7 @@
 
 import React, { useRef, useState, useMemo } from 'react';
 import { useIsMobile } from '@/hooks/useIsMobile';
-import { Download } from 'lucide-react';
+import { Download, Sun, Moon } from 'lucide-react';
 import ReactMarkdown from "react-markdown";
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
@@ -25,9 +25,10 @@ interface DocRenderProps {
     documentBlocks: Block[];
     setDocumentBlocks: React.Dispatch<React.SetStateAction<Block[]>>;
     onSelectionChange?: (data: SelectionData | null) => void;
+    theme?: 'dark' | 'light';
 }
 
-export default function DocRender({ documentBlocks, setDocumentBlocks, onSelectionChange }: DocRenderProps) {
+export default function DocRender({ documentBlocks, setDocumentBlocks, onSelectionChange, theme = 'dark' }: DocRenderProps) {
     const documentRef = useRef<HTMLDivElement>(null);
     const [showLoginPrompt, setShowLoginPrompt] = useState(false);
     const { isAuthenticated } = useAuth();
@@ -248,6 +249,28 @@ export default function DocRender({ documentBlocks, setDocumentBlocks, onSelecti
             // Get the rendered HTML from the document
             const documentContent = documentRef.current?.innerHTML || '';
 
+            const isLight = theme === 'light';
+            const bgClass = isLight ? '#f9fafb' : '#030712';
+            const textBase = isLight ? '#1f2937' : '#D8A1A1';
+            const h1Color = isLight ? '#111827' : '#6EE7E7';
+            const h2Color = isLight ? '#1f2937' : '#A7F3D0';
+            const h3Color = isLight ? '#374151' : '#C4B5FD';
+            const strongColor = isLight ? '#111827' : '#F2B8A2';
+            const emColor = isLight ? '#4b5563' : '#C7C7C7';
+            const ulColor = isLight ? '#4b5563' : '#D28ADB';
+            const olColor = isLight ? '#4b5563' : '#D1696F';
+            const blockquoteBorder = isLight ? '#d1d5db' : '#5FB3A2';
+            const blockquoteText = isLight ? '#6b7280' : '#9DB8A0';
+            const codeBg = isLight ? '#f3f4f6' : '#111827';
+            const codeText = isLight ? '#1f2937' : '#93C5FD';
+            const preBg = isLight ? '#f3f4f6' : '#0B1220';
+            const preText = isLight ? '#1f2937' : '#BFC5CC';
+            const aColor = isLight ? '#2563eb' : '#6EE7E7';
+            const hrBorder = isLight ? '#e5e7eb' : '#1F2937';
+            const tableBorder = isLight ? '#d1d5db' : '#374151';
+            const theadBg = isLight ? '#f3f4f6' : '#1F2937';
+            const thColor = isLight ? '#111827' : '#A7F3D0';
+
             printWindow.document.write(`
       <!DOCTYPE html>
       <html lang="en">
@@ -272,8 +295,8 @@ export default function DocRender({ documentBlocks, setDocumentBlocks, onSelecti
               font-family: 'Pangolin', cursive !important;
               font-size: 12px;
               line-height: 1.8;
-              background-color: #030712 !important;
-              color: #D8A1A1;
+              background-color: ${bgClass} !important;
+              color: ${textBase};
               margin: 2cm;
               -webkit-print-color-adjust: exact !important;
               print-color-adjust: exact !important;
@@ -281,51 +304,51 @@ export default function DocRender({ documentBlocks, setDocumentBlocks, onSelecti
             
             
             p { 
-              color: #D8A1A1 !important;
+              color: ${textBase} !important;
               margin-bottom: 1rem;
               line-height: 1.75;
             }
             
             strong {
-              color: #F2B8A2 !important;
+              color: ${strongColor} !important;
               font-weight: 600;
             }
             
             em {
-              color: #C7C7C7 !important;
+              color: ${emColor} !important;
               font-style: italic;
             }
             
             h1 {
-              color: #6EE7E7 !important;
+              color: ${h1Color} !important;
               font-size: 1.875rem;
               font-weight: 700;
               margin-bottom: 1rem;
             }
             
             h2 {
-              color: #A7F3D0 !important;
+              color: ${h2Color} !important;
               font-size: 1.5rem;
               font-weight: 600;
               margin-bottom: 0.75rem;
             }
             
             h3 {
-              color: #C4B5FD !important;
+              color: ${h3Color} !important;
               font-size: 1.25rem;
               font-weight: 500;
               margin-bottom: 0.5rem;
             }
             
             ul {
-              color: #D28ADB !important;
+              color: ${ulColor} !important;
               list-style-type: disc;
               list-style-position: inside;
               margin-bottom: 1rem;
             }
             
             ol {
-              color: #D1696F !important;
+              color: ${olColor} !important;
               list-style-type: decimal;
               list-style-position: inside;
               margin-bottom: 1rem;
@@ -338,16 +361,16 @@ export default function DocRender({ documentBlocks, setDocumentBlocks, onSelecti
             }
             
             blockquote {
-              border-left: 4px solid #5FB3A2 !important;
+              border-left: 4px solid ${blockquoteBorder} !important;
               padding-left: 1rem;
               font-style: italic;
-              color: #9DB8A0 !important;
+              color: ${blockquoteText} !important;
               margin-bottom: 1rem;
             }
             
             code {
-              background-color: #111827 !important;
-              color: #93C5FD !important;
+              background-color: ${codeBg} !important;
+              color: ${codeText} !important;
               padding: 0.125rem 0.375rem;
               border-radius: 0.25rem;
               font-size: 0.875rem;
@@ -355,8 +378,8 @@ export default function DocRender({ documentBlocks, setDocumentBlocks, onSelecti
             }
             
             pre {
-              background-color: #0B1220 !important;
-              color: #BFC5CC !important;
+              background-color: ${preBg} !important;
+              color: ${preText} !important;
               padding: 1rem;
               border-radius: 0.5rem;
               overflow-x: auto;
@@ -369,18 +392,18 @@ export default function DocRender({ documentBlocks, setDocumentBlocks, onSelecti
             }
             
             a {
-              color: #6EE7E7 !important;
+              color: ${aColor} !important;
               text-decoration: underline;
               text-underline-offset: 4px;
             }
             
             a:hover {
-              color: #93C5FD !important;
+              opacity: 0.8;
             }
             
             hr {
               border: none;
-              border-top: 1px solid #1F2937 !important;
+              border-top: 1px solid ${hrBorder} !important;
               margin: 1.5rem 0;
             }
             
@@ -388,29 +411,29 @@ export default function DocRender({ documentBlocks, setDocumentBlocks, onSelecti
               width: 100%;
               border-collapse: collapse;
               margin-bottom: 1rem;
-              border: 1px solid #374151 !important;
+              border: 1px solid ${tableBorder} !important;
             }
             
             thead {
-              background-color: #1F2937 !important;
+              background-color: ${theadBg} !important;
             }
             
             th {
               padding: 0.5rem 1rem;
               text-align: left;
-              color: #A7F3D0 !important;
+              color: ${thColor} !important;
               font-weight: 600;
-              border: 1px solid #374151 !important;
+              border: 1px solid ${tableBorder} !important;
             }
             
             td {
               padding: 0.5rem 1rem;
-              color: #D8A1A1 !important;
-              border: 1px solid #374151 !important;
+              color: ${textBase} !important;
+              border: 1px solid ${tableBorder} !important;
             }
             
             tr {
-              border-bottom: 1px solid #374151 !important;
+              border-bottom: 1px solid ${tableBorder} !important;
             }
             
             .mb-6 {
@@ -429,7 +452,7 @@ export default function DocRender({ documentBlocks, setDocumentBlocks, onSelecti
                 color-adjust: exact !important;
               }
               body {
-                background-color: #030712 !important;
+                background-color: ${bgClass} !important;
               }
             }
           </style>
@@ -446,7 +469,7 @@ export default function DocRender({ documentBlocks, setDocumentBlocks, onSelecti
     };
 
     return (
-        <div className="flex flex-col h-full bg-neutral-900 text-neutral-100 rounded-b-2xl border-l-2 overflow-hidden">
+        <div className={`flex flex-col h-full rounded-b-2xl border-l-2 overflow-hidden transition-colors duration-300 ${theme === 'light' ? 'bg-white text-gray-800' : 'bg-neutral-900 text-neutral-100'}`}>
             <div className="flex-1 overflow-y-auto scrollbar-hide">
                 <div className={`mx-auto ${isMobile ? 'w-full' : 'max-w-4xl'}`}>
 
@@ -463,7 +486,7 @@ export default function DocRender({ documentBlocks, setDocumentBlocks, onSelecti
                     {/* Document Preview */}
                     <div className={`flex-1 ${isMobile ? 'p-2' : 'p-8'}`}>
                         <div
-                            className="bg-gray-950 mx-auto shadow-2xl"
+                            className={`${theme === 'light' ? 'bg-white shadow-lg border border-gray-200' : 'bg-gray-950 shadow-2xl'} mx-auto transition-colors duration-300`}
                             style={{
                                 maxWidth: isMobile ? '100%' : '21cm',
                                 width: '100%',
@@ -476,7 +499,7 @@ export default function DocRender({ documentBlocks, setDocumentBlocks, onSelecti
                                 ref={documentRef}
                                 onMouseUp={handleMouseUp}
                                 onMouseDown={handleMouseDown}
-                                className="prose max-w-none "
+                                className={`prose max-w-none transition-colors duration-300 ${theme === 'light' ? 'prose-neutral' : 'prose-invert'}`}
                                 style={{ fontSize: '12px', lineHeight: '1.8' }}
                             >
                                 {documentBlocks.length === 0 ? (
@@ -504,51 +527,52 @@ export default function DocRender({ documentBlocks, setDocumentBlocks, onSelecti
                                                     className="mb-6 select-text cursor-text"
                                                 >
                                                     <ReactMarkdown
+                                                        key={`${group.id}-${theme}`}
                                                         components={{
                                                             p: ({ children }) => (
-                                                                <p className="text-[#D8A1A1] mb-4 leading-relaxed">
+                                                                <p className={`${theme === 'light' ? 'text-gray-800' : 'text-[#D8A1A1]'} mb-4 leading-relaxed`}>
                                                                     {children}
                                                                 </p>
                                                             ),
 
                                                             strong: ({ children }) => (
-                                                                <strong className="text-[#F2B8A2] font-semibold">
+                                                                <strong className={`${theme === 'light' ? 'text-gray-900' : 'text-[#F2B8A2]'} font-semibold`}>
                                                                     {children}
                                                                 </strong>
                                                             ),
 
                                                             em: ({ children }) => (
-                                                                <em className="text-[#C7C7C7] italic">
+                                                                <em className={`${theme === 'light' ? 'text-gray-600' : 'text-[#C7C7C7]'} italic`}>
                                                                     {children}
                                                                 </em>
                                                             ),
 
                                                             h1: ({ children }) => (
-                                                                <h1 className="text-[#6EE7E7] text-3xl font-bold mb-4">
+                                                                <h1 className={`${theme === 'light' ? 'text-gray-900' : 'text-[#6EE7E7]'} text-3xl font-bold mb-4`}>
                                                                     {children}
                                                                 </h1>
                                                             ),
 
                                                             h2: ({ children }) => (
-                                                                <h2 className="text-[#A7F3D0] text-2xl font-semibold mb-3">
+                                                                <h2 className={`${theme === 'light' ? 'text-gray-800' : 'text-[#A7F3D0]'} text-2xl font-semibold mb-3`}>
                                                                     {children}
                                                                 </h2>
                                                             ),
 
                                                             h3: ({ children }) => (
-                                                                <h3 className="text-[#C4B5FD] text-xl font-medium mb-2">
+                                                                <h3 className={`${theme === 'light' ? 'text-gray-700' : 'text-[#C4B5FD]'} text-xl font-medium mb-2`}>
                                                                     {children}
                                                                 </h3>
                                                             ),
 
                                                             ul: ({ children }) => (
-                                                                <ul className="list-disc list-inside text-[#D28ADB] mb-4 space-y-1">
+                                                                <ul className={`list-disc list-inside ${theme === 'light' ? 'text-gray-700' : 'text-[#D28ADB]'} mb-4 space-y-1`}>
                                                                     {children}
                                                                 </ul>
                                                             ),
 
                                                             ol: ({ children }) => (
-                                                                <ol className="list-decimal list-inside text-[#D1696F] mb-4 space-y-1">
+                                                                <ol className={`list-decimal list-inside ${theme === 'light' ? 'text-gray-700' : 'text-[#D1696F]'} mb-4 space-y-1`}>
                                                                     {children}
                                                                 </ol>
                                                             ),
@@ -560,25 +584,25 @@ export default function DocRender({ documentBlocks, setDocumentBlocks, onSelecti
                                                             ),
 
                                                             blockquote: ({ children }) => (
-                                                                <blockquote className="border-l-4 border-[#5FB3A2] pl-4 italic text-[#9DB8A0] mb-4">
+                                                                <blockquote className={`border-l-4 ${theme === 'light' ? 'border-gray-300 text-gray-600' : 'border-[#5FB3A2] text-[#9DB8A0]'} pl-4 italic mb-4`}>
                                                                     {children}
                                                                 </blockquote>
                                                             ),
 
                                                             code: ({ children }) => (
-                                                                <code className="bg-[#0B1220] text-[#93C5FD] px-1.5 py-0.5 rounded text-sm">
+                                                                <code className={`${theme === 'light' ? 'bg-gray-100 text-gray-800' : 'bg-[#0B1220] text-[#93C5FD]'} px-1.5 py-0.5 rounded text-sm`}>
                                                                     {children}
                                                                 </code>
                                                             ),
 
                                                             pre: ({ children }) => (
-                                                                <pre className="bg-[#0B1220] text-[#BFC5CC] p-4 rounded-lg overflow-x-auto mb-4">{children}</pre>
+                                                                <pre className={`${theme === 'light' ? 'bg-gray-100 text-gray-800' : 'bg-[#0B1220] text-[#BFC5CC]'} p-4 rounded-lg overflow-x-auto mb-4`}>{children}</pre>
                                                             ),
 
                                                             a: ({ children, href }) => (
                                                                 <a
                                                                     href={href}
-                                                                    className="text-[#6EE7E7] underline underline-offset-4 hover:text-[#93C5FD] transition-colors"
+                                                                    className={`${theme === 'light' ? 'text-blue-600 hover:text-blue-800' : 'text-[#6EE7E7] hover:text-[#93C5FD]'} underline underline-offset-4 transition-colors`}
                                                                     target="_blank"
                                                                     rel="noopener noreferrer"
                                                                 >
@@ -587,18 +611,18 @@ export default function DocRender({ documentBlocks, setDocumentBlocks, onSelecti
                                                             ),
 
                                                             hr: () => (
-                                                                <hr className="border-[#1F2937] my-6" />
+                                                                <hr className={`border-t ${theme === 'light' ? 'border-gray-200' : 'border-[#1F2937]'} my-6`} />
                                                             ),
                                                             table: ({ children }) => (
                                                                 <div className="overflow-x-auto mb-4">
-                                                                    <table className="min-w-full border-collapse border border-[#374151]">
+                                                                    <table className={`min-w-full border-collapse border ${theme === 'light' ? 'border-gray-300' : 'border-[#374151]'}`}>
                                                                         {children}
                                                                     </table>
                                                                 </div>
                                                             ),
 
                                                             thead: ({ children }) => (
-                                                                <thead className="bg-[#1F2937]">
+                                                                <thead className={`${theme === 'light' ? 'bg-gray-100' : 'bg-[#1F2937]'}`}>
                                                                     {children}
                                                                 </thead>
                                                             ),
@@ -610,19 +634,19 @@ export default function DocRender({ documentBlocks, setDocumentBlocks, onSelecti
                                                             ),
 
                                                             tr: ({ children }) => (
-                                                                <tr className="border-b border-[#374151]">
+                                                                <tr className={`border-b ${theme === 'light' ? 'border-gray-300' : 'border-[#374151]'}`}>
                                                                     {children}
                                                                 </tr>
                                                             ),
 
                                                             th: ({ children }) => (
-                                                                <th className="px-4 py-2 text-left text-[#A7F3D0] font-semibold border border-[#374151]">
+                                                                <th className={`px-4 py-2 text-left ${theme === 'light' ? 'text-gray-900 border-gray-300' : 'text-[#A7F3D0] border-[#374151]'} font-semibold border`}>
                                                                     {children}
                                                                 </th>
                                                             ),
 
                                                             td: ({ children }) => (
-                                                                <td className="px-4 py-2 text-[#D8A1A1] border border-[#374151]">
+                                                                <td className={`px-4 py-2 ${theme === 'light' ? 'text-gray-800 border-gray-300' : 'text-[#D8A1A1] border-[#374151]'} border`}>
                                                                     {children}
                                                                 </td>
                                                             ),

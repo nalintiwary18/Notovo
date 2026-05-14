@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, Shield, Zap, X } from 'lucide-react';
 
@@ -38,10 +38,15 @@ const infoCards: InfoCard[] = [
 ];
 
 export default function InfoCarousel() {
-    const [visible, setVisible] = useState(() => {
-        if (typeof window === 'undefined') return false;
-        return !sessionStorage.getItem(INFO_SEEN_KEY);
-    });
+    // Always start as false so SSR and client first-render match (no hydration mismatch).
+    // useEffect runs only after hydration, then we check sessionStorage for the real value.
+    const [visible, setVisible] = useState(false);
+
+    useEffect(() => {
+        if (!sessionStorage.getItem(INFO_SEEN_KEY)) {
+            setVisible(true);
+        }
+    }, []);
 
     const dismiss = () => {
         sessionStorage.setItem(INFO_SEEN_KEY, 'true');
@@ -90,7 +95,7 @@ export default function InfoCarousel() {
                                         Notovo
                                     </h2>
                                     <span className="text-[10px] font-medium tracking-wide uppercase px-1.5 py-0.5 rounded-md bg-neutral-800 border border-neutral-700/50 text-neutral-500">
-                                        v0.5.1 beta
+                                        v0.6.1 beta
                                     </span>
                                 </div>
                                 <p className="text-sm text-neutral-500 mt-0.5">

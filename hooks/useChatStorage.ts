@@ -26,6 +26,7 @@ export interface Message {
         selectedText: string
         command: string
     }
+    reasoningSummary?: string  // Think Mode: short user-safe reasoning summary (1-3 sentences)
 }
 
 
