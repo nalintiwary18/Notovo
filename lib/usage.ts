@@ -14,11 +14,11 @@ import { supabase } from './supabase'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const FREE_TOKEN_LIMIT   = 200_000   // tokens per week
+const FREE_TOKEN_LIMIT   = 20_000   // tokens per week
 const FREE_MAX_PAGES     = 10
 const FREE_EDITS_PER_DAY = 5
 
-const PRO_TOKEN_LIMIT   = 1_000_000  // future-ready
+const PRO_TOKEN_LIMIT   = 1_000_000  // for future updates
 const PRO_MAX_PAGES     = 50
 const PRO_EDITS_PER_DAY = 100
 
